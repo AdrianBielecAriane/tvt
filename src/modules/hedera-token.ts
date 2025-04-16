@@ -20,21 +20,22 @@ import { Hedera } from './hedera';
 import { invariant } from '../utils/invariant';
 import { HederaWallet } from './hedera-wallet';
 import { AssumptionObject } from '../methods';
+import { getEnv } from './config';
 
 export class HederaToken {
   serials = new Set<number>();
   tokenId;
   isPaused = false;
   hedera: Hedera;
-  createFee: Hbar;
+  createFee: Hbar | undefined;
 
-  private constructor(tokenId: TokenId, hedera: Hedera, createFee: Hbar) {
+  private constructor(tokenId: TokenId, hedera: Hedera, createFee?: Hbar) {
     this.tokenId = tokenId;
     this.hedera = hedera;
     this.createFee = createFee;
   }
 
-  static async create(hedera: Hedera) {
+  static async create(hedera: Hedera, omitFee?: boolean) {
     console.log('\n- Creating NFT Token');
     let nftCreateTx = new TokenCreateTransaction()
       .setTokenName('ETL Token')
@@ -58,7 +59,16 @@ export class HederaToken {
     let tokenId = nftCreateRx.tokenId;
     invariant(tokenId, 'Token id not found');
     console.log(`- Created NFT with Token ID: ${tokenId}`);
-    return new HederaToken(tokenId, hedera, record.transactionFee);
+    return new HederaToken(tokenId, hedera, omitFee ? undefined : record.transactionFee);
+  }
+
+  static async init(hedera: Hedera) {
+    const prefix = hedera.getPrefix();
+    const tokenId = getEnv({ prefix, key: 'TOKEN_ID' });
+    if (tokenId) {
+      return new HederaToken(TokenId.fromString(tokenId), hedera, undefined);
+    }
+    return HederaToken.create(hedera, true);
   }
 
   async mint() {

@@ -1,6 +1,8 @@
 import { AccountBalanceQuery, AccountId, Client, HbarUnit, PrivateKey } from '@hashgraph/sdk';
 import { Config } from './config';
 
+export type ConfigPrefix = ReturnType<Hedera['getPrefix']>;
+
 export class Hedera {
   client: Client;
   private config: Config['config'];
@@ -16,11 +18,17 @@ export class Hedera {
       this.client = Client[config.network === 'mainnet' ? 'forMainnet' : 'forTestnet']();
     }
 
-    console.log(config.operatorId);
     this.operatorId = AccountId.fromString(config.operatorId);
     this.operatorKey = PrivateKey.fromStringECDSA(config.operatorKey);
 
     this.client.setOperator(this.operatorId, this.operatorKey);
+  }
+
+  getPrefix() {
+    const { network } = this.config;
+    const shortcut = network === 'localnet' ? 'LOCAL' : network === 'mainnet' ? 'MAINNET' : 'TESTNET';
+    const prefix = `TVT_${shortcut}` as const;
+    return prefix;
   }
 
   async getCustodianBalance() {

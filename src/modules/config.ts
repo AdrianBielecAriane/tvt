@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { CONFIG_FILE_PATH, CONFIG_PATH } from '../utils/load-env';
 import { httpPing } from '../utils/http-ping';
+import { ConfigPrefix } from './hedera';
 
 const networkOptions = ['mainnet', 'testnet', 'localnet'] as const;
 export type Network = (typeof networkOptions)[number];
@@ -24,13 +25,48 @@ type ExternalConfig = {
 };
 
 const configSchema = z.object({
-  CONFIG: z.preprocess((v) => {
-    if (typeof v !== 'string') return undefined;
-    return JSON.parse(v);
-  }, z.object({ TVT_LOCAL_OPERATOR_ID: z.string().optional(), TVT_LOCAL_OPERATOR_KEY: z.string().optional(), TVT_LOCAL_NETWORK_IP: z.string().optional(), TVT_TESTNET_OPERATOR_ID: z.string().optional(), TVT_TESTNET_OPERATOR_KEY: z.string().optional(), TVT_MAINNET_OPERATOR_ID: z.string().optional(), TVT_MAINNET_OPERATOR_KEY: z.string().optional() }).optional()),
+  TVT_LOCAL_OPERATOR_ID: z.string().optional(),
+  TVT_LOCAL_OPERATOR_KEY: z.string().optional(),
+  TVT_LOCAL_NETWORK_IP: z.string().optional(),
+  TVT_LOCAL_TOPIC_ID: z.string().optional(),
+  TVT_LOCAL_CONTRACT_FILE_ID: z.string(),
+  TVT_LOCAL_CONTRACT_ID: z.string(),
+  TVT_LOCAL_TOKEN_ID: z.string(),
+
+  TVT_TESTNET_OPERATOR_ID: z.string().optional(),
+  TVT_TESTNET_OPERATOR_KEY: z.string().optional(),
+  TVT_TESTNET_TOPIC_ID: z.string().optional(),
+  TVT_TESTNET_CONTRACT_FILE_ID: z.string(),
+  TVT_TESTNET_CONTRACT_ID: z.string(),
+  TVT_TESTNET_TOKEN_ID: z.string(),
+
+  TVT_MAINNET_OPERATOR_ID: z.string().optional(),
+  TVT_MAINNET_OPERATOR_KEY: z.string().optional(),
+  TVT_MAINNET_TOPIC_ID: z.string().optional(),
+  TVT_MAINNET_CONTRACT_FILE_ID: z.string(),
+  TVT_MAINNET_CONTRACT_ID: z.string(),
+  TVT_MAINNET_TOKEN_ID: z.string(),
 });
 
-const envs = configSchema.parse(process.env)?.CONFIG ?? {};
+export const envs = configSchema.parse(process.env);
+
+type ConfigSchema = NonNullable<z.infer<typeof configSchema>>;
+type ConfigKey = keyof ConfigSchema;
+type KeysWithPrefix<P extends ConfigPrefix> = Extract<ConfigKey, `${P}_${string}`>;
+
+type SuffixesForPrefix<P extends ConfigPrefix> = {
+  [Key in keyof ConfigSchema]: Key extends `${P}_${infer Suffix}` ? Suffix : never;
+}[keyof ConfigSchema]; //ConfigKey extends `${P}_${infer Suffix}` ? Suffix : never;
+
+export const getEnv = <P extends ConfigPrefix, K extends SuffixesForPrefix<P>>({
+  key,
+  prefix,
+}: {
+  prefix: P;
+  key: K;
+}) => {
+  return envs[`${prefix}_${key}` as keyof typeof envs];
+};
 
 export class Config {
   config: LocalConfig | ExternalConfig;

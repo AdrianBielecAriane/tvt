@@ -4,18 +4,20 @@ import { invariant } from '../utils/invariant';
 import { Hedera } from './hedera';
 import { randomString } from 'remeda';
 import { AssumptionObject } from '../methods';
+import { getEnv } from './config';
 
 export class HederaFile {
   fileId;
   hedera;
-  createFee: Hbar;
-  private constructor(fileId: FileId, hedera: Hedera, createFee: Hbar) {
+  createFee: Hbar | undefined;
+
+  private constructor(fileId: FileId, hedera: Hedera, createFee?: Hbar) {
     this.fileId = fileId;
     this.hedera = hedera;
     this.createFee = createFee;
   }
 
-  static async create(hedera: Hedera) {
+  static async create(hedera: Hedera, omitFee?: boolean) {
     const transaction = new FileCreateTransaction()
       .setContents(helloHedera.data.bytecode.object)
       .setKeys([hedera.operatorKey.publicKey]);
@@ -25,7 +27,16 @@ export class HederaFile {
     invariant(fileId, 'File id not found');
     const record = await submitTx.getRecord(hedera.client);
 
-    return new HederaFile(fileId, hedera, record.transactionFee);
+    return new HederaFile(fileId, hedera, omitFee ? undefined : record.transactionFee);
+  }
+
+  static async initSmartContractFile(hedera: Hedera) {
+    const prefix = hedera.getPrefix();
+    const fileId = getEnv({ prefix, key: 'CONTRACT_FILE_ID' });
+    if (fileId) {
+      return new HederaFile(FileId.fromString(fileId), hedera);
+    }
+    return HederaFile.create(hedera, true);
   }
 
   async append(): Promise<AssumptionObject> {
