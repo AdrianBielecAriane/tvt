@@ -3,7 +3,6 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { CONFIG_FILE_PATH, CONFIG_PATH } from '../utils/load-env';
 import { httpPing } from '../utils/http-ping';
 import { ConfigPrefix } from './hedera';
 
@@ -29,30 +28,41 @@ const configSchema = z.object({
   TVT_LOCAL_OPERATOR_KEY: z.string().optional(),
   TVT_LOCAL_NETWORK_IP: z.string().optional(),
   TVT_LOCAL_TOPIC_ID: z.string().optional(),
-  TVT_LOCAL_CONTRACT_FILE_ID: z.string(),
-  TVT_LOCAL_CONTRACT_ID: z.string(),
-  TVT_LOCAL_TOKEN_ID: z.string(),
+  TVT_LOCAL_CONTRACT_FILE_ID: z.string().optional(),
+  TVT_LOCAL_CONTRACT_ID: z.string().optional(),
+  TVT_LOCAL_TOKEN_ID: z.string().optional(),
+  TVT_LOCAL_WALLET_ID: z.string().optional(),
+  TVT_LOCAL_FILE_ID: z.string().optional(),
 
   TVT_TESTNET_OPERATOR_ID: z.string().optional(),
   TVT_TESTNET_OPERATOR_KEY: z.string().optional(),
   TVT_TESTNET_TOPIC_ID: z.string().optional(),
-  TVT_TESTNET_CONTRACT_FILE_ID: z.string(),
-  TVT_TESTNET_CONTRACT_ID: z.string(),
-  TVT_TESTNET_TOKEN_ID: z.string(),
+  TVT_TESTNET_CONTRACT_FILE_ID: z.string().optional(),
+  TVT_TESTNET_CONTRACT_ID: z.string().optional(),
+  TVT_TESTNET_TOKEN_ID: z.string().optional(),
+  TVT_TESTNET_WALLET_ID: z.string().optional(),
+  TVT_TESTNET_FILE_ID: z.string().optional(),
 
   TVT_MAINNET_OPERATOR_ID: z.string().optional(),
   TVT_MAINNET_OPERATOR_KEY: z.string().optional(),
   TVT_MAINNET_TOPIC_ID: z.string().optional(),
-  TVT_MAINNET_CONTRACT_FILE_ID: z.string(),
-  TVT_MAINNET_CONTRACT_ID: z.string(),
-  TVT_MAINNET_TOKEN_ID: z.string(),
+  TVT_MAINNET_CONTRACT_FILE_ID: z.string().optional(),
+  TVT_MAINNET_CONTRACT_ID: z.string().optional(),
+  TVT_MAINNET_TOKEN_ID: z.string().optional(),
+  TVT_MAINNET_WALLET_ID: z.string().optional(),
+  TVT_MAINNET_FILE_ID: z.string().optional(),
 });
 
-export const envs = configSchema.parse(process.env);
+try {
+  await fs.access('config.json', fs.constants.F_OK);
+} catch {
+  await fs.writeFile('config.json', `{}`, { encoding: 'utf-8' });
+}
+
+const configFile = await fs.readFile('config.json', { encoding: 'utf-8' });
+export const envs = configSchema.parse(JSON.parse(configFile));
 
 type ConfigSchema = NonNullable<z.infer<typeof configSchema>>;
-type ConfigKey = keyof ConfigSchema;
-type KeysWithPrefix<P extends ConfigPrefix> = Extract<ConfigKey, `${P}_${string}`>;
 
 type SuffixesForPrefix<P extends ConfigPrefix> = {
   [Key in keyof ConfigSchema]: Key extends `${P}_${infer Suffix}` ? Suffix : never;
@@ -173,11 +183,7 @@ export class Config {
         break;
     }
 
-    if (!fsSync.existsSync(CONFIG_PATH)) {
-      await fs.mkdir(CONFIG_PATH, { recursive: true });
-    }
-
-    await fs.writeFile(CONFIG_FILE_PATH, `CONFIG=${JSON.stringify({ ...envs, ...newConfigFile })}\n`, {
+    await fs.writeFile('config.json', JSON.stringify({ ...envs, ...newConfigFile }), {
       encoding: 'utf-8',
     });
     return new Config(configInitializer);

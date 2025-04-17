@@ -1,5 +1,6 @@
 import {
   Hbar,
+  NftId,
   PrivateKey,
   Status,
   TokenBurnTransaction,
@@ -7,6 +8,7 @@ import {
   TokenDeleteTransaction,
   TokenId,
   TokenMintTransaction,
+  TokenNftInfoQuery,
   TokenPauseTransaction,
   TokenSupplyType,
   TokenType,
@@ -22,21 +24,23 @@ import { HederaWallet } from './hedera-wallet';
 import { AssumptionObject } from '../methods';
 import { getEnv } from './config';
 
+interface Mint {
+  nft: HederaNft;
+  details: AssumptionObject;
+}
+
 export class HederaToken {
   serials = new Set<number>();
   tokenId;
   isPaused = false;
   hedera: Hedera;
-  createFee: Hbar | undefined;
 
-  private constructor(tokenId: TokenId, hedera: Hedera, createFee?: Hbar) {
+  private constructor(tokenId: TokenId, hedera: Hedera) {
     this.tokenId = tokenId;
     this.hedera = hedera;
-    this.createFee = createFee;
   }
 
-  static async create(hedera: Hedera, omitFee?: boolean) {
-    console.log('\n- Creating NFT Token');
+  static async create(hedera: Hedera) {
     let nftCreateTx = new TokenCreateTransaction()
       .setTokenName('ETL Token')
       .setTokenSymbol('ETL')
@@ -54,25 +58,33 @@ export class HederaToken {
 
     let nftCreateSubmit = await nftCreateTx.execute(hedera.client);
     let nftCreateRx = await nftCreateSubmit.getReceipt(hedera.client);
-    const record = await nftCreateSubmit.getRecord(hedera.client);
 
     let tokenId = nftCreateRx.tokenId;
     invariant(tokenId, 'Token id not found');
     console.log(`- Created NFT with Token ID: ${tokenId}`);
-    return new HederaToken(tokenId, hedera, omitFee ? undefined : record.transactionFee);
+    return new HederaToken(tokenId, hedera);
   }
 
   static async init(hedera: Hedera) {
     const prefix = hedera.getPrefix();
     const tokenId = getEnv({ prefix, key: 'TOKEN_ID' });
     if (tokenId) {
-      return new HederaToken(TokenId.fromString(tokenId), hedera, undefined);
+      try {
+        const token = new HederaToken(TokenId.fromString(tokenId), hedera);
+        const nft = await HederaNft.init(token, hedera);
+        return { token, nft };
+      } catch {
+        const token = await HederaToken.create(hedera);
+        const { nft } = await token.mint();
+        return { token, nft };
+      }
     }
-    return HederaToken.create(hedera, true);
+    const token = await HederaToken.create(hedera);
+    const { nft } = await token.mint();
+    return { token, nft };
   }
 
-  async mint() {
-    console.log(`- Minting ${this.tokenId.toString()} NFT Token`);
+  async mint(): Promise<Mint> {
     let mintTx = new TokenMintTransaction()
       .setTokenId(this.tokenId)
       .addMetadata(new Uint8Array(Buffer.from(R.randomString(19))))
@@ -88,7 +100,10 @@ export class HederaToken {
     }
     invariant(firstSerial, 'Serial not found');
     const record = await mintTxSubmit.getRecord(this.hedera.client);
-    return new HederaNft(firstSerial, this, this.hedera, record.transactionFee);
+    return {
+      nft: new HederaNft(firstSerial, this, this.hedera),
+      details: { fee: record.transactionFee, transactionId: mintTxSubmit.transactionId.toString(), type: 'TOKEN_MINT' },
+    };
   }
 }
 
@@ -100,13 +115,16 @@ class HederaNft {
   serial;
   token;
   hedera;
-  createFee: Hbar;
 
-  constructor(serial: number, token: HederaToken, hedera: Hedera, createFee: Hbar) {
+  constructor(serial: number, token: HederaToken, hedera: Hedera) {
     this.serial = serial;
     this.token = token;
     this.hedera = hedera;
-    this.createFee = createFee;
+  }
+
+  static async init(token: HederaToken, hedera: Hedera) {
+    await new TokenNftInfoQuery().setNftId(new NftId(new TokenId(token.tokenId), 1)).execute(hedera.client);
+    return new HederaNft(1, token, hedera);
   }
 
   async burn(): Promise<AssumptionObject> {
@@ -125,6 +143,6 @@ class HederaNft {
     if (response.status === Status.Success) {
       this.token.serials.delete(this.serial);
     }
-    return { type: 'TOKEN_BURN', fee: record.transactionFee };
+    return { type: 'TOKEN_BURN', fee: record.transactionFee, transactionId: txResponse.transactionId.toString() };
   }
 }

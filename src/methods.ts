@@ -1,22 +1,22 @@
-import inquirer from 'inquirer';
 import { Hedera } from './modules/hedera';
-import { HederaToken } from './modules/hedera-token';
+import { HederaNftClass, HederaToken } from './modules/hedera-token';
 import { HederaWallet } from './modules/hedera-wallet';
 import {
   AccountAllowanceApproveTransaction,
-  AccountId,
   ContractExecuteTransaction,
   ContractFunctionParameters,
   EthereumTransaction,
   Hbar,
   HbarUnit,
-  TopicMessageSubmitTransaction,
   TransferTransaction,
 } from '@hashgraph/sdk';
 import { HederaTopic } from './modules/hedera-topic';
 import { HederaContract } from './modules/hedera-contract';
-import { randomString } from 'remeda';
+import { json2csv } from 'json-2-csv';
+import path from 'path';
 import { HederaFile } from './modules/hedera-file';
+import fs from 'fs/promises';
+import { envs } from './modules/config';
 
 const transactionTypes = [
   'CRYPTO_TRANSFER',
@@ -34,120 +34,189 @@ type TransactionType = (typeof transactionTypes)[number];
 
 export interface AssumptionObject {
   type: TransactionType;
+  transactionId: string;
   fee: Hbar;
 }
 
 export class Methods {
+  private data = new Map<
+    TransactionType,
+    {
+      transactionId: string;
+      fee: Hbar;
+    }[]
+  >();
+
   private receiver: HederaWallet;
   private topic: HederaTopic;
   private token: HederaToken;
   private hedera;
   private contract: HederaContract;
+  private file: HederaFile;
+  private nft: HederaNftClass;
 
   private constructor(
     hedera: Hedera,
     topic: HederaTopic,
     contract: HederaContract,
     receiver: HederaWallet,
-    token: HederaToken
+    token: HederaToken,
+    nft: HederaNftClass,
+    file: HederaFile
   ) {
     this.hedera = hedera;
     this.receiver = receiver;
     this.topic = topic;
     this.contract = contract;
     this.token = token;
+    this.nft = nft;
+    this.file = file;
   }
 
   static async create(hedera: Hedera) {
-    const receiver = await HederaWallet.create(hedera);
-    const topic = await HederaTopic.create(hedera);
-    const contract = await HederaContract.create(hedera);
-    const token = await HederaToken.create(hedera);
+    console.clear();
+    console.log('Initializing CLI');
+    const prefix = hedera.getPrefix();
+    const receiver = await HederaWallet.init(hedera);
+    const topic = await HederaTopic.init(hedera);
+    const contract = await HederaContract.init(hedera);
+    const { token, nft } = await HederaToken.init(hedera);
+    const file = await HederaFile.init(hedera);
 
-    return new Methods(hedera, topic, contract, receiver, token);
+    const config = {
+      [`${prefix}_WALLET_ID`]: receiver.accountId.toString(),
+      [`${prefix}_TOPIC_ID`]: topic.topicId.toString(),
+      [`${prefix}_CONTRACT_ID`]: contract.contractId.toStringWithChecksum(hedera.client),
+      [`${prefix}_CONTRACT_FILE_ID`]: contract.file.fileId.toString(),
+      [`${prefix}_TOKEN_ID`]: token.tokenId.toString(),
+      [`${prefix}_FILE_ID`]: file.fileId.toString(),
+    };
+
+    await fs.writeFile('config.json', JSON.stringify({ ...envs, ...config }), {
+      encoding: 'utf-8',
+    });
+    return new Methods(hedera, topic, contract, receiver, token, nft, file);
   }
 
-  async associateToken() {
-    const wallet = await HederaWallet.create(this.hedera);
-    await wallet.associateToken(this.token);
+  async saveDetailsRaport(hedera: Hedera, folderPath: string) {
+    const headers = ['Type', 'Fee', 'Transaction id', 'Hashscan link'];
+    const rows: string[][] = [];
+    let hashscanUrl;
+    if (hedera.config.network === 'localnet') {
+      hashscanUrl = `http://${hedera.config.networkIp}:8080/devnet/transaction`;
+    } else {
+      hashscanUrl = `https://hashscan.io/${hedera.config.network}/transaction`;
+    }
+
+    for (const [type, transactions] of this.data.entries()) {
+      for (const transaction of transactions) {
+        rows.push([
+          type,
+          transaction.fee.toBigNumber().toNumber().toString(),
+          transaction.transactionId,
+          `${hashscanUrl}/${transaction.transactionId}`,
+        ]);
+      }
+    }
+    const csv = json2csv([headers, ...rows], { prependHeader: false });
+    await fs.writeFile(path.join(folderPath, `detailed-raport.csv`), csv, { encoding: 'utf-8' });
   }
 
-  async fileAppend() {
-    const file = await HederaFile.create(this.hedera);
-    await file.append();
+  async saveRaport(folderPath: string) {
+    const headers = ['Type', 'Average fee', 'Total fee', 'Transactions'];
+    const rows: string[][] = [];
+
+    for (const [type, transactions] of this.data.entries()) {
+      const totalFee = transactions.reduce((acc, curr) => {
+        const { fee } = curr;
+        return acc + fee.toBigNumber().toNumber();
+      }, 0);
+      rows.push([type, `${totalFee / transactions.length}`, totalFee.toString(), transactions.length.toString()]);
+    }
+    const csv = json2csv([headers, ...rows], { prependHeader: false });
+    await fs.writeFile(path.join(folderPath, `raport.csv`), csv, { encoding: 'utf-8' });
   }
 
-  async allowanceApproveTransaction() {
+  async storeDataWrapper(method: () => Promise<AssumptionObject>) {
+    const { type, ...data } = await method.call(this);
+    const cachedItem = this.data.get(type) ?? [];
+    this.data.set(type, [...cachedItem, data]);
+  }
+
+  async associateToken(): Promise<AssumptionObject> {
+    const { wallet } = await HederaWallet.create(this.hedera);
+    return wallet.associateToken(this.token);
+  }
+
+  async fileAppend(): Promise<AssumptionObject> {
+    return this.file.append();
+  }
+
+  async allowanceApproveTransaction(): Promise<AssumptionObject> {
     const transaction = new AccountAllowanceApproveTransaction()
       .approveHbarAllowance(this.hedera.operatorId, this.receiver.accountId, Hbar.from(100, HbarUnit.Tinybar))
       .freezeWith(this.hedera.client);
     const signTx = await transaction.sign(this.hedera.operatorKey);
     const txResponse = await signTx.execute(this.hedera.client);
-    const receipt = await txResponse.getReceipt(this.hedera.client);
-    console.log(receipt.status.toString(), transaction.transactionId?.toString());
+    const record = await txResponse.getRecord(this.hedera.client);
+    return {
+      fee: record.transactionFee,
+      transactionId: txResponse.transactionId.toString(),
+      type: 'CRYPTO_APPROVE_ALLOWANCE',
+    };
   }
 
   // TODO: not working
-  async ethereumTransaction() {
+  async ethereumTransaction(): Promise<AssumptionObject> {
     const file = await HederaFile.create(this.hedera);
     const tx = new EthereumTransaction().setCallDataFileId(file.fileId);
     const txResponse = await tx.execute(this.hedera.client);
-    const receipt = await txResponse.getReceipt(this.hedera.client);
-    console.log(txResponse.transactionId);
+    const record = await txResponse.getRecord(this.hedera.client);
+    return {
+      fee: record.transactionFee,
+      transactionId: txResponse.transactionId.toString(),
+      type: 'ETHEREUM_TRANSACTION',
+    };
   }
 
-  async contractCall() {
-    if (!this.contract) {
-      this.contract = await HederaContract.create(this.hedera);
-    }
-    console.log('Contract created');
+  async contractCall(): Promise<AssumptionObject> {
     const transaction = new ContractExecuteTransaction()
       .setGas(100000)
       .setContractId(this.contract.contractId)
       .setFunction('set_message', new ContractFunctionParameters().addString('Hello from Hedera again!'));
     const submitExecTx = await transaction.execute(this.hedera.client);
-    const receipt2 = await submitExecTx.getReceipt(this.hedera.client);
-    console.log('The transaction status is ' + receipt2.status.toString());
+    const record = await submitExecTx.getRecord(this.hedera.client);
+    return { fee: record.transactionFee, transactionId: submitExecTx.transactionId.toString(), type: 'CONTRACT_CALL' };
   }
 
-  async topicMessageSubmit() {
-    if (!this.topic) {
-      this.topic = await HederaTopic.create(this.hedera);
-    }
-    await this.topic.submitMessage();
+  async topicMessageSubmit(): Promise<AssumptionObject> {
+    return this.topic.submitMessage();
   }
 
-  async transferHBar() {
-    if (!this.receiver) {
-      this.receiver = await HederaWallet.create(this.hedera);
-    }
+  async transferHBar(): Promise<AssumptionObject> {
     let transaction = new TransferTransaction()
       .addHbarTransfer(this.hedera.operatorId, new Hbar(-1, HbarUnit.Tinybar))
       .addHbarTransfer(this.receiver.accountId, new Hbar(1, HbarUnit.Tinybar));
     transaction = transaction.freezeWith(this.hedera.client);
     const signedTx = await transaction.sign(this.hedera.operatorKey);
     const txResponse = await signedTx.execute(this.hedera.client);
-    const receipt = await txResponse.getReceipt(this.hedera.client);
-    const transactionStatus = receipt.status;
-
-    console.log('The transaction consensus status is ' + transactionStatus.toString());
+    const record = await txResponse.getRecord(this.hedera.client);
+    return { fee: record.transactionFee, transactionId: txResponse.transactionId.toString(), type: 'CRYPTO_TRANSFER' };
   }
 
-  async createWallet() {
-    const wallet = await HederaWallet.create(this.hedera);
-    return wallet;
+  async createWallet(): Promise<AssumptionObject> {
+    const { details } = await HederaWallet.create(this.hedera);
+    return details;
   }
 
-  async tokenBurn() {
+  async tokenBurn(): Promise<AssumptionObject> {
     const token = await HederaToken.create(this.hedera);
-    const nft = await token.mint();
-    await nft.burn();
+    const { nft } = await token.mint();
+    return nft.burn();
   }
 
-  async tokenMint(quantity = 1) {
-    const token = await HederaToken.create(this.hedera);
-    for (const _ of new Array(quantity).fill(0)) {
-      await token.mint();
-    }
+  async tokenMint(): Promise<AssumptionObject> {
+    const { details } = await this.token.mint();
+    return details;
   }
 }

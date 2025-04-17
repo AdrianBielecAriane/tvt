@@ -9,31 +9,34 @@ import * as R from 'remeda';
 import { Hedera } from './hedera';
 import { invariant } from '../utils/invariant';
 import { AssumptionObject } from '../methods';
+import { getEnv } from './config';
 
 export class HederaTopic {
   topicId: TopicId;
   hedera: Hedera;
-  createFee: Hbar;
 
-  private constructor(topicId: TopicId, hedera: Hedera, createFee: Hbar) {
+  private constructor(topicId: TopicId, hedera: Hedera) {
     this.topicId = topicId;
     this.hedera = hedera;
-    this.createFee = createFee;
   }
 
   static async create(hedera: Hedera) {
     const transaction = new TopicCreateTransaction().setAdminKey(hedera.operatorKey);
     const txResponse = await transaction.execute(hedera.client);
     const receipt = await txResponse.getReceipt(hedera.client);
-    const record = await txResponse.getRecord(hedera.client);
 
     const topicId = receipt.topicId;
     invariant(topicId, 'Topic id not found');
-    console.log({
-      topicId: topicId.toString(),
-      transactionStatus: receipt.status.toString(),
-    });
-    return new HederaTopic(topicId, hedera, record.transactionFee);
+    return new HederaTopic(topicId, hedera);
+  }
+
+  static async init(hedera: Hedera) {
+    const prefix = hedera.getPrefix();
+    const topicId = getEnv({ prefix, key: 'TOPIC_ID' });
+    if (topicId) {
+      return new HederaTopic(TopicId.fromString(topicId), hedera);
+    }
+    return HederaTopic.create(hedera);
   }
 
   async submitMessage(): Promise<AssumptionObject> {
@@ -41,6 +44,10 @@ export class HederaTopic {
     const res = await transaction.execute(this.hedera.client);
     await res.getReceipt(this.hedera.client);
     const record = await res.getRecord(this.hedera.client);
-    return { type: 'CONSENSUS_SUBMIT_MESSAGE', fee: record.transactionFee };
+    return {
+      type: 'CONSENSUS_SUBMIT_MESSAGE',
+      fee: record.transactionFee,
+      transactionId: res.transactionId.toString(),
+    };
   }
 }

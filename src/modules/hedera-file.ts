@@ -30,6 +30,15 @@ export class HederaFile {
     return new HederaFile(fileId, hedera, omitFee ? undefined : record.transactionFee);
   }
 
+  static async init(hedera: Hedera) {
+    const prefix = hedera.getPrefix();
+    const fileId = getEnv({ prefix, key: 'FILE_ID' });
+    if (fileId) {
+      return new HederaFile(FileId.fromString(fileId), hedera);
+    }
+    return HederaFile.create(hedera, true);
+  }
+
   static async initSmartContractFile(hedera: Hedera) {
     const prefix = hedera.getPrefix();
     const fileId = getEnv({ prefix, key: 'CONTRACT_FILE_ID' });
@@ -46,8 +55,7 @@ export class HederaFile {
       .freezeWith(this.hedera.client);
     const signTx = await transaction.sign(this.hedera.operatorKey);
     const txResponse = await signTx.execute(this.hedera.client);
-    await txResponse.getReceipt(this.hedera.client);
     const record = await txResponse.getRecord(this.hedera.client);
-    return { type: 'FILE_APPEND', fee: record.transactionFee };
+    return { type: 'FILE_APPEND', fee: record.transactionFee, transactionId: txResponse.transactionId.toString() };
   }
 }

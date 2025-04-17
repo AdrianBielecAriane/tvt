@@ -1,20 +1,26 @@
 import { Config } from './modules/config';
 import { Hedera } from './modules/hedera';
 import inquirer from 'inquirer';
+import fsSync from 'fs';
+import fs from 'fs/promises';
 import chalk from 'chalk';
 import { chunk } from 'remeda';
-import { Methods } from './methods';
+import { AssumptionObject, Methods } from './methods';
+import { config as configDotenv } from 'dotenv';
+import path from 'path';
+
+configDotenv();
 
 const config = await Config.create();
 const hedera = new Hedera(config);
 const methods = await Methods.create(hedera);
 
-const actions = [
+export const actions = [
   'Approve allowance',
   'Eth transaction',
   'Transfer HBar',
-  'TOKEN_ASSOCIATE',
-  'FILE_APPEND',
+  'TOKEN ASSOCIATE',
+  'FILE APPEND',
   'Call contract',
   'Mint token',
   'Burn token',
@@ -73,47 +79,39 @@ const allActions = Array.from(quantities).flatMap(([key, value]) => {
 
 const chunkedActions = chunk(allActions, Math.ceil(allActions.length / 3));
 
+const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionObject>> = {
+  'Approve allowance': methods.allowanceApproveTransaction,
+  'Burn token': methods.tokenBurn,
+  'Call contract': methods.contractCall,
+  'Create account': methods.createWallet,
+  'Mint token': methods.tokenMint,
+  'Submit message': methods.topicMessageSubmit,
+  'Transfer HBar': methods.transferHBar,
+  'FILE APPEND': methods.fileAppend,
+  'TOKEN ASSOCIATE': methods.associateToken,
+  'Eth transaction': methods.ethereumTransaction,
+};
+
+let actionCount = 0;
 for (const chunk of chunkedActions) {
   await Promise.all(
     chunk.map((action) => {
       return new Promise(async (resolve) => {
-        switch (action) {
-          case 'Burn token':
-            await methods.tokenBurn();
-            break;
-          case 'Mint token':
-            await methods.tokenMint();
-            break;
-          case 'Create account':
-            await methods.createWallet();
-            break;
-          case 'Transfer HBar':
-            await methods.transferHBar();
-            break;
-          case 'Submit message':
-            await methods.topicMessageSubmit();
-            break;
-          case 'Call contract':
-            await methods.contractCall();
-            break;
-          case 'Approve allowance':
-            await methods.allowanceApproveTransaction();
-            break;
-          case 'TOKEN_ASSOCIATE':
-            await methods.associateToken();
-            break;
-          case 'FILE_APPEND':
-            await methods.fileAppend();
-            break;
-          // TODO: FIX
-          case 'Eth transaction':
-            await methods.ethereumTransaction();
-            break;
-        }
+        console.log(`action: ${++actionCount} is called`);
+        await methods.storeDataWrapper(mappedMethods[action]);
         resolve(true);
       });
     })
   );
 }
 
+if (!fsSync.existsSync('raports')) {
+  await fs.mkdir('raports', { recursive: true });
+}
+
+const time = new Date().getTime();
+const raportsPath = path.join('raports', time.toString());
+await fs.mkdir(raportsPath);
+
+await Promise.all([methods.saveRaport(raportsPath), methods.saveDetailsRaport(hedera, raportsPath)]);
 process.exit();

@@ -5,7 +5,7 @@ export type ConfigPrefix = ReturnType<Hedera['getPrefix']>;
 
 export class Hedera {
   client: Client;
-  private config: Config['config'];
+  config: Config['config'];
   operatorKey: PrivateKey;
   operatorId: AccountId;
 

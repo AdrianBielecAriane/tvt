@@ -23,7 +23,7 @@ export class HederaContract {
     const createdContractId = getEnv({ prefix, key: 'CONTRACT_ID' });
 
     if (createdContractId) {
-      return new HederaContract(ContractId.fromString(createdContractId), file, hedera, undefined);
+      return new HederaContract(ContractId.fromString(createdContractId), file, hedera);
     }
     return HederaContract.create(hedera, true);
   }
