@@ -59,8 +59,13 @@ try {
   await fs.writeFile('config.json', `{}`, { encoding: 'utf-8' });
 }
 
-const configFile = await fs.readFile('config.json', { encoding: 'utf-8' });
-export const envs = configSchema.parse(JSON.parse(configFile));
+// Always load fresh envs
+export const getEnvsFile = async () => {
+  const configFile = await fs.readFile('config.json', { encoding: 'utf-8' });
+  return configSchema.parse(JSON.parse(configFile));
+};
+
+const envs = await getEnvsFile();
 
 type ConfigSchema = NonNullable<z.infer<typeof configSchema>>;
 

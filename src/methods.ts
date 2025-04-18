@@ -16,7 +16,7 @@ import { json2csv } from 'json-2-csv';
 import path from 'path';
 import { HederaFile } from './modules/hedera-file';
 import fs from 'fs/promises';
-import { envs } from './modules/config';
+import { getEnvsFile } from './modules/config';
 import { Ethers } from './modules/ethers';
 import { coingekoApi } from './modules/coingeko';
 
@@ -96,7 +96,7 @@ export class Methods {
       [`${prefix}_TOKEN_ID`]: token.tokenId.toString(),
       [`${prefix}_FILE_ID`]: file.fileId.toString(),
     };
-
+    const envs = await getEnvsFile();
     await fs.writeFile('config.json', JSON.stringify({ ...envs, ...config }), {
       encoding: 'utf-8',
     });
