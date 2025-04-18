@@ -71,11 +71,6 @@ export class HederaWallet {
   ): Promise<AssumptionObject> {
     const validTo = Array.isArray(to) ? to : [to];
     const amount = 1;
-    console.log(
-      `Transferring ${amount} HBars from ${this.accountId.toString()} to ${validTo
-        .map((to) => to.accountId.toString())
-        .join(',')}`
-    );
 
     let transaction = new TransferTransaction().addHbarTransfer(
       this.accountId,
@@ -100,12 +95,10 @@ export class HederaWallet {
     const receipt = await txResponse.getReceipt(this.hedera.client);
     const transactionStatus = receipt.status;
     const record = await txResponse.getRecord(this.hedera.client);
-    console.log('The transaction consensus status is ' + transactionStatus.toString());
     return { fee: record.transactionFee, type: 'CRYPTO_TRANSFER', transactionId: txResponse.transactionId.toString() };
   }
 
   async associateToken(token: HederaToken): Promise<AssumptionObject> {
-    console.log(`associating token: ${token.tokenId.toString()} to ${this.accountId.toString()}`);
     const transaction = new TokenAssociateTransaction()
       .setTokenIds([token.tokenId])
       .setAccountId(this.accountId)

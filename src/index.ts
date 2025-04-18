@@ -17,7 +17,7 @@ const methods = await Methods.create(hedera);
 
 export const actions = [
   'Approve allowance',
-  'Eth transaction',
+  'Eth transaction (NOT WORKING)',
   'Transfer HBar',
   'TOKEN ASSOCIATE',
   'FILE APPEND',
@@ -89,21 +89,22 @@ const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionOb
   'Transfer HBar': methods.transferHBar,
   'FILE APPEND': methods.fileAppend,
   'TOKEN ASSOCIATE': methods.associateToken,
-  'Eth transaction': methods.ethereumTransaction,
+  'Eth transaction (NOT WORKING)': methods.ethereumTransaction,
 };
 
 let actionCount = 0;
-for (const chunk of chunkedActions) {
-  await Promise.all(
-    chunk.map((action) => {
-      return new Promise(async (resolve) => {
+
+await Promise.all(
+  chunkedActions.map((actions) => {
+    return new Promise(async (resolve) => {
+      for (const action of actions) {
         console.log(`action: ${++actionCount} is called`);
         await methods.storeDataWrapper(mappedMethods[action]);
-        resolve(true);
-      });
-    })
-  );
-}
+      }
+      resolve(true);
+    });
+  })
+);
 
 if (!fsSync.existsSync('raports')) {
   await fs.mkdir('raports', { recursive: true });

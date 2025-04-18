@@ -1,21 +1,13 @@
 import {
-  Hbar,
   NftId,
-  PrivateKey,
   Status,
   TokenBurnTransaction,
   TokenCreateTransaction,
-  TokenDeleteTransaction,
   TokenId,
   TokenMintTransaction,
   TokenNftInfoQuery,
-  TokenPauseTransaction,
   TokenSupplyType,
   TokenType,
-  TokenUnpauseTransaction,
-  TokenUpdateTransaction,
-  TokenWipeTransaction,
-  TransferTransaction,
 } from '@hashgraph/sdk';
 import * as R from 'remeda';
 import { Hedera } from './hedera';
@@ -61,7 +53,6 @@ export class HederaToken {
 
     let tokenId = nftCreateRx.tokenId;
     invariant(tokenId, 'Token id not found');
-    console.log(`- Created NFT with Token ID: ${tokenId}`);
     return new HederaToken(tokenId, hedera);
   }
 
@@ -128,8 +119,6 @@ class HederaNft {
   }
 
   async burn(): Promise<AssumptionObject> {
-    console.log(`burning ${this.token.tokenId.toString()} with serial ${this.serial}`);
-
     const transaction = new TokenBurnTransaction()
       .setTokenId(this.token.tokenId)
       .setSerials([this.serial])
@@ -139,7 +128,6 @@ class HederaNft {
     const txResponse = await signTx.execute(this.hedera.client);
     const response = await txResponse.getReceipt(this.hedera.client);
     const record = await txResponse.getRecord(this.hedera.client);
-    console.log(`- Token burn: ${response.status}`);
     if (response.status === Status.Success) {
       this.token.serials.delete(this.serial);
     }

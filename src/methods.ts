@@ -17,6 +17,8 @@ import path from 'path';
 import { HederaFile } from './modules/hedera-file';
 import fs from 'fs/promises';
 import { envs } from './modules/config';
+import { Ethers } from './modules/ethers';
+import { coingekoApi } from './modules/coingeko';
 
 const transactionTypes = [
   'CRYPTO_TRANSFER',
@@ -46,7 +48,7 @@ export class Methods {
       fee: Hbar;
     }[]
   >();
-
+  private ethers;
   private receiver: HederaWallet;
   private topic: HederaTopic;
   private token: HederaToken;
@@ -62,7 +64,8 @@ export class Methods {
     receiver: HederaWallet,
     token: HederaToken,
     nft: HederaNftClass,
-    file: HederaFile
+    file: HederaFile,
+    ethers: Ethers
   ) {
     this.hedera = hedera;
     this.receiver = receiver;
@@ -71,6 +74,7 @@ export class Methods {
     this.token = token;
     this.nft = nft;
     this.file = file;
+    this.ethers = ethers;
   }
 
   static async create(hedera: Hedera) {
@@ -82,6 +86,7 @@ export class Methods {
     const contract = await HederaContract.init(hedera);
     const { token, nft } = await HederaToken.init(hedera);
     const file = await HederaFile.init(hedera);
+    const ethers = new Ethers(hedera);
 
     const config = {
       [`${prefix}_WALLET_ID`]: receiver.accountId.toString(),
@@ -95,7 +100,7 @@ export class Methods {
     await fs.writeFile('config.json', JSON.stringify({ ...envs, ...config }), {
       encoding: 'utf-8',
     });
-    return new Methods(hedera, topic, contract, receiver, token, nft, file);
+    return new Methods(hedera, topic, contract, receiver, token, nft, file, ethers);
   }
 
   async saveDetailsRaport(hedera: Hedera, folderPath: string) {
@@ -123,7 +128,15 @@ export class Methods {
   }
 
   async saveRaport(folderPath: string) {
-    const headers = ['Type', 'Average fee', 'Total fee', 'Transactions'];
+    const price = await coingekoApi.getHbarPriceInUsd();
+    const headers = [
+      'Type',
+      'Average fee',
+      'Total fee',
+      'Average Fee in USD',
+      'Total fee in USD',
+      'Number of transactions',
+    ];
     const rows: string[][] = [];
 
     for (const [type, transactions] of this.data.entries()) {
@@ -131,7 +144,18 @@ export class Methods {
         const { fee } = curr;
         return acc + fee.toBigNumber().toNumber();
       }, 0);
-      rows.push([type, `${totalFee / transactions.length}`, totalFee.toString(), transactions.length.toString()]);
+
+      const avgFee = totalFee / transactions.length;
+      const hbarPrice = price['hedera-hashgraph'].usd;
+
+      rows.push([
+        type,
+        `${totalFee / transactions.length}`,
+        totalFee.toString(),
+        (avgFee * hbarPrice).toString(),
+        (totalFee * hbarPrice).toString(),
+        transactions.length.toString(),
+      ]);
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
     await fs.writeFile(path.join(folderPath, `raport.csv`), csv, { encoding: 'utf-8' });
@@ -168,15 +192,7 @@ export class Methods {
 
   // TODO: not working
   async ethereumTransaction(): Promise<AssumptionObject> {
-    const file = await HederaFile.create(this.hedera);
-    const tx = new EthereumTransaction().setCallDataFileId(file.fileId);
-    const txResponse = await tx.execute(this.hedera.client);
-    const record = await txResponse.getRecord(this.hedera.client);
-    return {
-      fee: record.transactionFee,
-      transactionId: txResponse.transactionId.toString(),
-      type: 'ETHEREUM_TRANSACTION',
-    };
+    return this.ethers.createRawTransaction(this.receiver);
   }
 
   async contractCall(): Promise<AssumptionObject> {
@@ -210,8 +226,7 @@ export class Methods {
   }
 
   async tokenBurn(): Promise<AssumptionObject> {
-    const token = await HederaToken.create(this.hedera);
-    const { nft } = await token.mint();
+    const { nft } = await this.token.mint();
     return nft.burn();
   }
 

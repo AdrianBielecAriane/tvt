@@ -66,7 +66,7 @@ type ConfigSchema = NonNullable<z.infer<typeof configSchema>>;
 
 type SuffixesForPrefix<P extends ConfigPrefix> = {
   [Key in keyof ConfigSchema]: Key extends `${P}_${infer Suffix}` ? Suffix : never;
-}[keyof ConfigSchema]; //ConfigKey extends `${P}_${infer Suffix}` ? Suffix : never;
+}[keyof ConfigSchema];
 
 export const getEnv = <P extends ConfigPrefix, K extends SuffixesForPrefix<P>>({
   key,
