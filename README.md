@@ -1,4 +1,4 @@
-# TVT – Transaction Volume Toolkit (Hedera CLI Utility)
+# TVT – Transaction Validator Tool (Hedera CLI Utility)
 
 **TVT** is an interactive command-line application for performing and analyzing transactions on the **Hedera Hashgraph** network. It's designed to be easy for both business users and developers.
 
