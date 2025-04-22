@@ -17,7 +17,7 @@ const methods = await Methods.create(hedera);
 
 export const actions = [
   'Approve allowance',
-  'Eth transaction (NOT WORKING)',
+  'Eth transaction',
   'Transfer HBar',
   'TOKEN ASSOCIATE',
   'FILE APPEND',
@@ -89,22 +89,48 @@ const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionOb
   'Transfer HBar': methods.transferHBar,
   'FILE APPEND': methods.fileAppend,
   'TOKEN ASSOCIATE': methods.associateToken,
-  'Eth transaction (NOT WORKING)': methods.ethereumTransaction,
+  'Eth transaction': methods.ethereumTransaction,
 };
 
 let actionCount = 0;
+
+const failedRequests: (typeof actions)[number][] = [];
 
 await Promise.all(
   chunkedActions.map((actions) => {
     return new Promise(async (resolve) => {
       for (const action of actions) {
-        console.log(`action: ${++actionCount} is called`);
-        await methods.storeDataWrapper(mappedMethods[action]);
+        console.log(`we are on ${Math.round((++actionCount / allActions.length) * 100)}% done`);
+        try {
+          await methods.storeDataWrapper(mappedMethods[action]);
+        } catch (e) {
+          console.log(chalk.red(`Failed action ${action}, waiting 2.5s before start again`));
+          if (e instanceof Error) {
+            console.log(chalk.red(e.message));
+          }
+          failedRequests.push(action);
+          await new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(true);
+            }, 2500);
+          });
+        }
       }
       resolve(true);
     });
   })
 );
+
+if (failedRequests.length > 0) {
+  await methods.ethers.refetchNonce();
+  console.log(chalk.yellow(`Start to refetching failed transactions`));
+}
+
+let failedActionCount = 0;
+for (const failedAction of failedRequests) {
+  console.log(`we are on ${Math.round((++failedActionCount / failedRequests.length) * 100)}% done`);
+  await methods.storeDataWrapper(mappedMethods[failedAction]);
+}
 
 if (!fsSync.existsSync('raports')) {
   await fs.mkdir('raports', { recursive: true });

@@ -49,7 +49,7 @@ export class Methods {
       fee: Hbar;
     }[]
   >();
-  private ethers;
+  ethers;
   private receiver: HederaWallet;
   private topic: HederaTopic;
   private token: HederaToken;
@@ -87,7 +87,7 @@ export class Methods {
     const contract = await HederaContract.init(hedera);
     const { token, nft } = await HederaToken.init(hedera);
     const file = await HederaFile.init(hedera);
-    const ethers = new Ethers(hedera);
+    const ethers = await Ethers.create(hedera);
 
     const config = {
       [`${prefix}_WALLET_ID`]: receiver.accountId.toString(),
@@ -197,7 +197,6 @@ export class Methods {
     };
   }
 
-  // TODO: not working
   async ethereumTransaction(): Promise<AssumptionObject> {
     return this.ethers.createRawTransaction(this.receiver);
   }
