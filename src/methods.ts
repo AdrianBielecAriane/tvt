@@ -137,7 +137,8 @@ export class Methods {
       'Average Fee in USD',
       'Total fee in USD',
       'Number of transactions',
-      'Schedule fee difference',
+      'Schedule fee (USD)',
+      'Schedule fee difference(USD)',
     ];
     const rows: string[][] = [];
 
@@ -159,7 +160,8 @@ export class Methods {
         avgFeeInUsd.toString(),
         (totalFee * hbarPrice).toString(),
         transactions.length.toString(),
-        (scheduledFees[type] - avgFeeInUsd).toString(),
+        scheduledFees[type].toString(),
+        (scheduledFees[type] - avgFeeInUsd).toFixed(4),
       ]);
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
