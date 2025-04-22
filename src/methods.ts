@@ -19,6 +19,7 @@ import fs from 'fs/promises';
 import { getEnvsFile } from './modules/config';
 import { Ethers } from './modules/ethers';
 import { coingekoApi } from './modules/coingeko';
+import { scheduledFees } from './utils/scheduled-fees.data';
 
 const transactionTypes = [
   'CRYPTO_TRANSFER',
@@ -32,7 +33,7 @@ const transactionTypes = [
   'TOKEN_ASSOCIATE',
   'FILE_APPEND',
 ] as const;
-type TransactionType = (typeof transactionTypes)[number];
+export type TransactionType = (typeof transactionTypes)[number];
 
 export interface AssumptionObject {
   type: TransactionType;
@@ -136,6 +137,7 @@ export class Methods {
       'Average Fee in USD',
       'Total fee in USD',
       'Number of transactions',
+      'Schedule fee difference',
     ];
     const rows: string[][] = [];
 
@@ -148,13 +150,16 @@ export class Methods {
       const avgFee = totalFee / transactions.length;
       const hbarPrice = price['hedera-hashgraph'].usd;
 
+      const avgFeeInUsd = avgFee * hbarPrice;
+
       rows.push([
         type,
         `${totalFee / transactions.length}`,
         totalFee.toString(),
-        (avgFee * hbarPrice).toString(),
+        avgFeeInUsd.toString(),
         (totalFee * hbarPrice).toString(),
         transactions.length.toString(),
+        (scheduledFees[type] - avgFeeInUsd).toString(),
       ]);
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
