@@ -74,8 +74,8 @@ TVT will:
 
 After executing actions, TVT creates:
 
-- `raports/detailed-raport.csv` — per transaction data
-- `raports/raport.csv` — summary by type (with HBAR & USD fees)
+- `reports/detailed-report.csv` — per transaction data
+- `reports/report.csv` — summary by type (with HBAR & USD fees)
 
 ---
 

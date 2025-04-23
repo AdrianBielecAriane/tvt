@@ -104,8 +104,8 @@ export class Methods {
     return new Methods(hedera, topic, contract, receiver, token, nft, file, ethers);
   }
 
-  async saveDetailsRaport(hedera: Hedera, folderPath: string) {
-    const headers = ['Type', 'Fee', 'Transaction id', 'Hashscan link'];
+  async saveDetailsReport(hedera: Hedera, folderPath: string) {
+    const headers = ['Id', 'Type', 'Fee', 'Hashscan link'];
     const rows: string[][] = [];
     let hashscanUrl;
     if (hedera.config.network === 'localnet') {
@@ -117,25 +117,25 @@ export class Methods {
     for (const [type, transactions] of this.data.entries()) {
       for (const transaction of transactions) {
         rows.push([
+          transaction.transactionId.split('@')[1] ?? '',
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
-          transaction.transactionId,
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
       }
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
-    await fs.writeFile(path.join(folderPath, `detailed-raport.csv`), csv, { encoding: 'utf-8' });
+    await fs.writeFile(path.join(folderPath, `detailed-report.csv`), csv, { encoding: 'utf-8' });
   }
 
-  async saveRaport(folderPath: string) {
+  async saveReport(folderPath: string) {
     const price = await coingekoApi.getHbarPriceInUsd();
     const headers = [
       'Type',
-      'Average fee',
-      'Total fee',
-      'Average Fee in USD',
-      'Total fee in USD',
+      'Average fee (Hbar)',
+      'Total fee (HBar)',
+      'Average Fee (USD)',
+      'Total fee (USD)',
       'Number of transactions',
       'Schedule fee (USD)',
       'Schedule fee difference(USD)',
@@ -165,7 +165,7 @@ export class Methods {
       ]);
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
-    await fs.writeFile(path.join(folderPath, `raport.csv`), csv, { encoding: 'utf-8' });
+    await fs.writeFile(path.join(folderPath, `report.csv`), csv, { encoding: 'utf-8' });
   }
 
   async storeDataWrapper(method: () => Promise<AssumptionObject>) {

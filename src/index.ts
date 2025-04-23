@@ -8,6 +8,7 @@ import { chunk } from 'remeda';
 import { AssumptionObject, Methods } from './methods';
 import { config as configDotenv } from 'dotenv';
 import path from 'path';
+import { sleep } from './utils/sleep';
 
 configDotenv();
 
@@ -100,7 +101,8 @@ await Promise.all(
   chunkedActions.map((actions) => {
     return new Promise(async (resolve) => {
       for (const action of actions) {
-        console.log(`we are on ${Math.round((++actionCount / allActions.length) * 100)}% done`);
+        console.log(chalk.green(`${action} is called. ${++actionCount} / ${allActions.length}`));
+
         try {
           await methods.storeDataWrapper(mappedMethods[action]);
         } catch (e) {
@@ -109,11 +111,7 @@ await Promise.all(
             console.log(chalk.red(e.message));
           }
           failedRequests.push(action);
-          await new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(true);
-            }, 2500);
-          });
+          await sleep(2500);
         }
       }
       resolve(true);
@@ -128,17 +126,19 @@ if (failedRequests.length > 0) {
 
 let failedActionCount = 0;
 for (const failedAction of failedRequests) {
-  console.log(`we are on ${Math.round((++failedActionCount / failedRequests.length) * 100)}% done`);
+  console.log(chalk.green(`${failedAction} is called. ${++failedActionCount} / ${failedRequests.length}`));
   await methods.storeDataWrapper(mappedMethods[failedAction]);
 }
 
-if (!fsSync.existsSync('raports')) {
-  await fs.mkdir('raports', { recursive: true });
+if (!fsSync.existsSync('reports')) {
+  await fs.mkdir('reports', { recursive: true });
 }
 
 const time = new Date().getTime();
-const raportsPath = path.join('raports', time.toString());
-await fs.mkdir(raportsPath);
+const reportsPath = path.join('reports', time.toString());
+await fs.mkdir(reportsPath);
 
-await Promise.all([methods.saveRaport(raportsPath), methods.saveDetailsRaport(hedera, raportsPath)]);
+console.log('\n\n');
+console.log(chalk.green('Saving report'));
+await Promise.all([methods.saveReport(reportsPath), methods.saveDetailsReport(hedera, reportsPath)]);
 process.exit();
