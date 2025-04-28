@@ -17,27 +17,31 @@ import { AssumptionObject } from '../methods';
 import { getEnv } from './config';
 
 interface Mint {
-  nft: HederaNft;
+  nft: HederaNft | null;
   details: AssumptionObject;
 }
+
+type Type = 'NFT' | 'FT';
 
 export class HederaToken {
   serials = new Set<number>();
   tokenId;
   isPaused = false;
   hedera: Hedera;
+  type: Type;
 
-  private constructor(tokenId: TokenId, hedera: Hedera) {
+  private constructor(tokenId: TokenId, hedera: Hedera, type: Type) {
     this.tokenId = tokenId;
     this.hedera = hedera;
+    this.type = type;
   }
 
-  static async create(hedera: Hedera) {
+  static async create(hedera: Hedera, type: Type) {
     let nftCreateTx = new TokenCreateTransaction()
-      .setTokenName('ETL Token')
+      .setTokenName(`ETL Token ${type}`)
       .setTokenSymbol('ETL')
-      .setTokenType(TokenType.NonFungibleUnique)
-      .setDecimals(0)
+      .setTokenType(type === 'NFT' ? TokenType.NonFungibleUnique : TokenType.FungibleCommon)
+      .setDecimals(type === 'FT' ? 2 : 0)
       .setTreasuryAccountId(hedera.operatorId)
       .setSupplyType(TokenSupplyType.Infinite)
       .setAdminKey(hedera.operatorKey.publicKey)
@@ -53,26 +57,41 @@ export class HederaToken {
 
     let tokenId = nftCreateRx.tokenId;
     invariant(tokenId, 'Token id not found');
-    return new HederaToken(tokenId, hedera);
+    return new HederaToken(tokenId, hedera, type);
   }
 
   static async init(hedera: Hedera) {
     const prefix = hedera.getPrefix();
     const tokenId = getEnv({ prefix, key: 'TOKEN_ID' });
+    let nonFungibleToken;
+    let nft;
     if (tokenId) {
       try {
-        const token = new HederaToken(TokenId.fromString(tokenId), hedera);
-        const nft = await HederaNft.init(token, hedera);
-        return { token, nft };
+        nonFungibleToken = new HederaToken(TokenId.fromString(tokenId), hedera, 'NFT');
+        nft = await HederaNft.init(nonFungibleToken, hedera);
       } catch {
-        const token = await HederaToken.create(hedera);
-        const { nft } = await token.mint();
-        return { token, nft };
+        nonFungibleToken = await HederaToken.create(hedera, 'NFT');
+        const minted = await nonFungibleToken.mint();
+        nft = minted.nft;
       }
+    } else if (!nonFungibleToken || !nft) {
+      nonFungibleToken = await HederaToken.create(hedera, 'NFT');
+      const minted = await nonFungibleToken.mint();
+      nft = minted.nft;
     }
-    const token = await HederaToken.create(hedera);
-    const { nft } = await token.mint();
-    return { token, nft };
+
+    const ftTokenId = getEnv({ prefix, key: 'FUNGIBLE_TOKEN_ID' });
+    let fungibleToken;
+    if (ftTokenId) {
+      try {
+        fungibleToken = new HederaToken(TokenId.fromString(ftTokenId), hedera, 'FT');
+      } catch {
+        fungibleToken = await HederaToken.create(hedera, 'FT');
+      }
+    } else {
+      fungibleToken = await HederaToken.create(hedera, 'FT');
+    }
+    return { nonFungibleToken, nft, fungibleToken };
   }
 
   async mint(): Promise<Mint> {
@@ -85,15 +104,21 @@ export class HederaToken {
     let mintTxSubmit = await signedTx.execute(this.hedera.client);
     let mintRx = await mintTxSubmit.getReceipt(this.hedera.client);
     let firstSerial;
-    for (const serial of mintRx.serials) {
-      firstSerial = serial.low;
-      this.serials.add(serial.low);
+    if (this.type === 'NFT') {
+      for (const serial of mintRx.serials) {
+        firstSerial = serial.low;
+        this.serials.add(serial.low);
+      }
+      invariant(firstSerial, 'Serial not found');
     }
-    invariant(firstSerial, 'Serial not found');
     const record = await mintTxSubmit.getRecord(this.hedera.client);
     return {
-      nft: new HederaNft(firstSerial, this, this.hedera),
-      details: { fee: record.transactionFee, transactionId: mintTxSubmit.transactionId.toString(), type: 'TOKEN_MINT' },
+      nft: firstSerial ? new HederaNft(firstSerial, this, this.hedera) : null,
+      details: {
+        fee: record.transactionFee,
+        transactionId: mintTxSubmit.transactionId.toString(),
+        type: this.type === 'FT' ? 'TOKEN_MINT(FT)' : 'TOKEN_MINT(NFT)',
+      },
     };
   }
 }

@@ -20,12 +20,15 @@ import { getEnvsFile } from './modules/config';
 import { Ethers } from './modules/ethers';
 import { coingekoApi } from './modules/coingeko';
 import { scheduledFees } from './utils/scheduled-fees.data';
+import { invariant } from './utils/invariant';
+import { quantile, standardDeviation, median } from 'simple-statistics';
 
 const transactionTypes = [
   'CRYPTO_TRANSFER',
   'CONTRACT_CALL',
   'CONSENSUS_SUBMIT_MESSAGE',
-  'TOKEN_MINT',
+  'TOKEN_MINT(NFT)',
+  'TOKEN_MINT(FT)',
   'ETHEREUM_TRANSACTION',
   'CRYPTO_APPROVE_ALLOWANCE',
   'TOKEN_BURN',
@@ -39,6 +42,8 @@ export interface AssumptionObject {
   type: TransactionType;
   transactionId: string;
   fee: Hbar;
+  gasUsed?: Long | undefined;
+  gasFee?: Long | undefined;
 }
 
 export class Methods {
@@ -47,12 +52,15 @@ export class Methods {
     {
       transactionId: string;
       fee: Hbar;
+      gasUsed?: Long | undefined;
+      gasFee?: Long | undefined;
     }[]
   >();
   ethers;
   private receiver: HederaWallet;
   private topic: HederaTopic;
-  private token: HederaToken;
+  private nonFungibleToken: HederaToken;
+  private fungibleToken: HederaToken;
   private hedera;
   private contract: HederaContract;
   private file: HederaFile;
@@ -63,7 +71,8 @@ export class Methods {
     topic: HederaTopic,
     contract: HederaContract,
     receiver: HederaWallet,
-    token: HederaToken,
+    nonFungibleToken: HederaToken,
+    fungibleToken: HederaToken,
     nft: HederaNftClass,
     file: HederaFile,
     ethers: Ethers
@@ -72,7 +81,8 @@ export class Methods {
     this.receiver = receiver;
     this.topic = topic;
     this.contract = contract;
-    this.token = token;
+    this.nonFungibleToken = nonFungibleToken;
+    this.fungibleToken = fungibleToken;
     this.nft = nft;
     this.file = file;
     this.ethers = ethers;
@@ -85,7 +95,8 @@ export class Methods {
     const receiver = await HederaWallet.init(hedera);
     const topic = await HederaTopic.init(hedera);
     const contract = await HederaContract.init(hedera);
-    const { token, nft } = await HederaToken.init(hedera);
+    const { fungibleToken, nonFungibleToken, nft } = await HederaToken.init(hedera);
+    invariant(nft, 'NFT not exist');
     const file = await HederaFile.init(hedera);
     const ethers = await Ethers.create(hedera);
 
@@ -94,18 +105,19 @@ export class Methods {
       [`${prefix}_TOPIC_ID`]: topic.topicId.toString(),
       [`${prefix}_CONTRACT_ID`]: contract.contractId.toStringWithChecksum(hedera.client),
       [`${prefix}_CONTRACT_FILE_ID`]: contract.file.fileId.toString(),
-      [`${prefix}_TOKEN_ID`]: token.tokenId.toString(),
+      [`${prefix}_TOKEN_ID`]: nonFungibleToken.tokenId.toString(),
       [`${prefix}_FILE_ID`]: file.fileId.toString(),
+      [`${prefix}_FUNGIBLE_TOKEN_ID`]: fungibleToken.tokenId.toString(),
     };
     const envs = await getEnvsFile();
     await fs.writeFile('config.json', JSON.stringify({ ...envs, ...config }), {
       encoding: 'utf-8',
     });
-    return new Methods(hedera, topic, contract, receiver, token, nft, file, ethers);
+    return new Methods(hedera, topic, contract, receiver, nonFungibleToken, fungibleToken, nft, file, ethers);
   }
 
   async saveDetailsReport(hedera: Hedera, folderPath: string) {
-    const headers = ['Id', 'Type', 'Fee', 'Hashscan link'];
+    const headers = ['Id', 'Type', 'Fee(HBar)', 'Gas fee', 'Gas used', 'Hashscan link'];
     const rows: string[][] = [];
     let hashscanUrl;
     if (hedera.config.network === 'localnet') {
@@ -120,6 +132,8 @@ export class Methods {
           transaction.transactionId.split('@')[1] ?? '',
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
+          transaction.gasFee?.toString() ?? '-',
+          transaction.gasUsed?.toString() ?? '-',
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
       }
@@ -131,17 +145,21 @@ export class Methods {
   async saveReport(folderPath: string) {
     const price = await coingekoApi.getHbarPriceInUsd();
     const headers = [
-      'Type',
-      'Average fee (Hbar)',
-      'Total fee (HBar)',
-      'Average Fee (USD)',
+      'Transaction',
+      'Count',
       'Total fee (USD)',
-      'Number of transactions',
       'Schedule fee (USD)',
       'Schedule fee difference(USD)',
+      'Average Fee (USD)',
+      'St.Dev',
+      'Max',
+      'Perc 25',
+      'Median',
+      'Perc 75',
+      'Actl Closer to',
     ];
-    const rows: string[][] = [];
 
+    const rows: string[][] = [];
     for (const [type, transactions] of this.data.entries()) {
       const totalFee = transactions.reduce((acc, curr) => {
         const { fee } = curr;
@@ -150,18 +168,40 @@ export class Methods {
 
       const avgFee = totalFee / transactions.length;
       const hbarPrice = price['hedera-hashgraph'].usd;
-
+      const scheduleFee = scheduledFees[type];
       const avgFeeInUsd = avgFee * hbarPrice;
+      const feesArray = transactions
+        .map((transaction) => transaction.fee.toBigNumber().toNumber())
+        .sort((a, b) => a - b);
+      const max = Math.max(...feesArray);
+      const perc25 = quantile(feesArray, 0.25);
+      const perc75 = quantile(feesArray, 0.75);
+      const mediana = median(feesArray);
+
+      const actlList = [
+        { type: 'Max', value: Math.abs(scheduleFee - max) },
+        { type: '25th Percentile', value: Math.abs(scheduleFee - perc25) },
+        { type: '75th Percentile', value: Math.abs(scheduleFee - perc75) },
+        { type: 'Mean', value: Math.abs(scheduleFee - avgFee) },
+        { type: 'Median', value: Math.abs(scheduleFee - mediana) },
+      ] as const;
+      actlList.toSorted((a, b) => a.value - b.value);
+      const [actl] = actlList;
+      const allClosestValues = actlList.filter((v) => v.value === actl.value).map((v) => v.type);
 
       rows.push([
         type,
-        `${totalFee / transactions.length}`,
-        totalFee.toString(),
-        avgFeeInUsd.toString(),
-        (totalFee * hbarPrice).toString(),
         transactions.length.toString(),
-        scheduledFees[type].toString(),
+        (totalFee * hbarPrice).toString(),
+        scheduleFee.toString(),
         (scheduledFees[type] - avgFeeInUsd).toFixed(4),
+        avgFeeInUsd.toString(),
+        standardDeviation(feesArray).toString(),
+        max.toString(),
+        perc25.toString(),
+        mediana.toString(),
+        perc75.toString(),
+        allClosestValues.join(','),
       ]);
     }
     const csv = json2csv([headers, ...rows], { prependHeader: false });
@@ -176,7 +216,7 @@ export class Methods {
 
   async associateToken(): Promise<AssumptionObject> {
     const { wallet } = await HederaWallet.create(this.hedera);
-    return wallet.associateToken(this.token);
+    return wallet.associateToken(this.fungibleToken);
   }
 
   async fileAppend(): Promise<AssumptionObject> {
@@ -208,7 +248,14 @@ export class Methods {
       .setFunction('set_message', new ContractFunctionParameters().addString('Hello from Hedera again!'));
     const submitExecTx = await transaction.execute(this.hedera.client);
     const record = await submitExecTx.getRecord(this.hedera.client);
-    return { fee: record.transactionFee, transactionId: submitExecTx.transactionId.toString(), type: 'CONTRACT_CALL' };
+
+    return {
+      fee: record.transactionFee,
+      gasUsed: record.contractFunctionResult?.gasUsed,
+      gasFee: record.contractFunctionResult?.gas,
+      transactionId: submitExecTx.transactionId.toString(),
+      type: 'CONTRACT_CALL',
+    };
   }
 
   async topicMessageSubmit(): Promise<AssumptionObject> {
@@ -232,12 +279,14 @@ export class Methods {
   }
 
   async tokenBurn(): Promise<AssumptionObject> {
-    const { nft } = await this.token.mint();
+    const { nft } = await this.fungibleToken.mint();
+    invariant(nft, 'Failed to create nft');
     return nft.burn();
   }
 
-  async tokenMint(): Promise<AssumptionObject> {
-    const { details } = await this.token.mint();
+  async tokenMint(type: 'NFT' | 'FT'): Promise<AssumptionObject> {
+    const tokenToMint = type === 'NFT' ? this.fungibleToken : this.nonFungibleToken;
+    const { details } = await tokenToMint.mint();
     return details;
   }
 }

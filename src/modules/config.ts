@@ -33,6 +33,7 @@ const configSchema = z.object({
   TVT_LOCAL_TOKEN_ID: z.string().optional(),
   TVT_LOCAL_WALLET_ID: z.string().optional(),
   TVT_LOCAL_FILE_ID: z.string().optional(),
+  TVT_LOCAL_FUNGIBLE_TOKEN_ID: z.string().optional(),
 
   TVT_TESTNET_OPERATOR_ID: z.string().optional(),
   TVT_TESTNET_OPERATOR_KEY: z.string().optional(),
@@ -42,6 +43,7 @@ const configSchema = z.object({
   TVT_TESTNET_TOKEN_ID: z.string().optional(),
   TVT_TESTNET_WALLET_ID: z.string().optional(),
   TVT_TESTNET_FILE_ID: z.string().optional(),
+  TVT_TESTNET_FUNGIBLE_TOKEN_ID: z.string().optional(),
 
   TVT_MAINNET_OPERATOR_ID: z.string().optional(),
   TVT_MAINNET_OPERATOR_KEY: z.string().optional(),
@@ -51,6 +53,7 @@ const configSchema = z.object({
   TVT_MAINNET_TOKEN_ID: z.string().optional(),
   TVT_MAINNET_WALLET_ID: z.string().optional(),
   TVT_MAINNET_FILE_ID: z.string().optional(),
+  TVT_MAINNET_FUNGIBLE_TOKEN_ID: z.string().optional(),
 });
 
 try {

@@ -9,6 +9,9 @@ import { AssumptionObject, Methods } from './methods';
 import { config as configDotenv } from 'dotenv';
 import path from 'path';
 import { sleep } from './utils/sleep';
+import { format } from 'date-fns';
+import os from 'os';
+import { exec } from 'child_process';
 
 configDotenv();
 
@@ -23,7 +26,8 @@ export const actions = [
   'TOKEN ASSOCIATE',
   'FILE APPEND',
   'Call contract',
-  'Mint token',
+  'Mint token(NFT)',
+  'Mint token(FT)',
   'Burn token',
   'Create account',
   'Submit message',
@@ -85,7 +89,8 @@ const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionOb
   'Burn token': methods.tokenBurn,
   'Call contract': methods.contractCall,
   'Create account': methods.createWallet,
-  'Mint token': methods.tokenMint,
+  'Mint token(NFT)': () => methods.tokenMint('NFT'),
+  'Mint token(FT)': () => methods.tokenMint('FT'),
   'Submit message': methods.topicMessageSubmit,
   'Transfer HBar': methods.transferHBar,
   'FILE APPEND': methods.fileAppend,
@@ -134,11 +139,13 @@ if (!fsSync.existsSync('reports')) {
   await fs.mkdir('reports', { recursive: true });
 }
 
-const time = new Date().getTime();
-const reportsPath = path.join('reports', time.toString());
+const time = new Date();
+const reportsPath = path.join('reports', format(time, 'ddMMyyyy-HHmm'));
 await fs.mkdir(reportsPath);
 
 console.log('\n\n');
 console.log(chalk.green('Saving report'));
 await Promise.all([methods.saveReport(reportsPath), methods.saveDetailsReport(hedera, reportsPath)]);
+console.log(`file://${path.join(os.homedir(), reportsPath)}`);
+// exec(`open "${reportsPath}"`);
 process.exit();
