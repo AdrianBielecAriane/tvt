@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import inquirer from 'inquirer';
 import chalk from 'chalk';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import { httpPing } from '../utils/http-ping';
 import { ConfigPrefix } from './hedera';
+import { input } from '@inquirer/prompts';
 
 const networkOptions = ['mainnet', 'testnet', 'localnet'] as const;
 export type Network = (typeof networkOptions)[number];
@@ -96,22 +95,19 @@ export class Config {
   private static async setLocalNetwork() {
     const validateNetworkPattern =
       /^(?:(https?:\/\/)([^\s\/$.?#].[^\s]*)|(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})$/i;
-    return inquirer.prompt<{ localAddress: string }>([
-      {
-        type: 'input',
-        name: 'localAddress',
-        message: 'Input local network address, eg.',
-        validate: function (v) {
-          return new Promise(async (resolve, reject) => {
-            if (!v) reject();
-            const isValid = validateNetworkPattern.test(v);
-            if (!isValid) reject();
-            await Promise.all([httpPing({ address: `${v}:5600` }), httpPing({ address: `${v}:50211` })]);
-            resolve(true);
-          });
-        },
+    return input({
+      message: 'Input local network address, eg.',
+      required: true,
+      validate: function (v) {
+        return new Promise(async (resolve, reject) => {
+          if (!v) reject();
+          const isValid = validateNetworkPattern.test(v);
+          if (!isValid) reject();
+          await Promise.all([httpPing({ address: `${v}:5600` }), httpPing({ address: `${v}:50211` })]);
+          resolve(true);
+        });
       },
-    ]);
+    });
   }
 
   private static async initCredentials(network: Network) {
@@ -121,24 +117,20 @@ export class Config {
     let operatorId = envs[`${prefix}_OPERATOR_ID`];
     if (!operatorId) {
       console.log(chalk.yellow('Operator id is unset'));
-      const { id } = await inquirer.prompt<{ id: string }>([
-        {
-          message: 'Input operator id',
-          name: 'id',
-          type: 'input',
-          validate: (v) => !!v,
-        },
-      ]);
+      const id = await input({
+        message: 'Input operator id',
+        required: true,
+        validate: (v) => !!v,
+      });
       operatorId = id;
     }
 
     let operatorKey = envs[`${prefix}_OPERATOR_KEY`];
     if (!operatorKey) {
       console.log(chalk.yellow('Operator key is unset'));
-      const { key } = await inquirer.prompt<{ key: string }>({
+      const key = await input({
         message: 'Input operator key',
-        name: 'key',
-        type: 'input',
+        required: true,
         validate: (v) => !!v,
       });
       operatorKey = key;
@@ -155,22 +147,13 @@ export class Config {
   private static async initLocalNetwork() {
     let address = envs.TVT_LOCAL_NETWORK_IP;
     if (!address) {
-      const { localAddress } = await this.setLocalNetwork();
-      address = localAddress;
+      address = await this.setLocalNetwork();
     }
     const { operatorId, operatorKey, JSON_TO_SAVE } = await Config.initCredentials('localnet');
     return { address, operatorId, operatorKey, JSON_TO_SAVE: { ...JSON_TO_SAVE, TVT_LOCAL_NETWORK_IP: address } };
   }
 
-  static async create() {
-    const { network } = await inquirer.prompt<{ network: Network }>([
-      {
-        type: 'list',
-        name: 'network',
-        message: 'Select network',
-        choices: ['mainnet', 'testnet', 'localnet'],
-      },
-    ]);
+  static async create(network: Network) {
     let configInitializer: LocalConfig | ExternalConfig;
     let newConfigFile: Record<string, string> = {};
     switch (network) {

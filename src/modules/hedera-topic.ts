@@ -21,7 +21,9 @@ export class HederaTopic {
   }
 
   static async create(hedera: Hedera) {
-    const transaction = new TopicCreateTransaction().setAdminKey(hedera.operatorKey);
+    const transaction = new TopicCreateTransaction()
+      .setFeeScheduleKey(hedera.operatorKey)
+      .setAdminKey(hedera.operatorKey);
     const txResponse = await transaction.execute(hedera.client);
     const receipt = await txResponse.getReceipt(hedera.client);
 

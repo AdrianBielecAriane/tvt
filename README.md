@@ -38,19 +38,43 @@
 - [Node.js](https://nodejs.org/) (v18+ recommended)
 - Hedera Account ID + Private Key (get one from [Hedera Portal](https://portal.hedera.com/))
 
-### Installation
-
-```bash
-git clone https://github.com/AdrianBielecAriane/tvt.git
-cd tvt
-pnpm i
-```
-
 ### Running
 
 ```bash
-pnnpm start
+git clone https://github.com/AdrianBielecAriane/tvt.git
+docker build -t tvt .
+docker run tvt --network=testnet --quantity=1
 ```
+
+### Args
+
+Command allows us to insert such commands:
+
+- --quantity(required) - **How many times transactions will repat**
+- --network(required) - There are available three networks
+  - mainnet
+  - testnet
+  - localnet
+- --scheduler
+  Scheduler is based on nodejs package: https://www.npmjs.com/package/cron
+  To run scheduler you have to pass cron pattern value
+
+  - `*` Asterisks: Any value
+  - `1-3,5` Ranges: Ranges and individual values
+  - `*/2` Steps: Every two units
+    ```bash
+    field allowed values
+    second 0-59
+    minute 0-59
+    hour 0-23
+    day of month 1-31
+    month 1-12 (or names, see below)
+    day of week 0-7 (0 or 7 is Sunday, or use names)
+    ```
+
+- --stop-after
+  - Allowed time formats are: m, h, d, w
+  - Tha value must be in format f.e 2w (then scheduler will be stopped after 2 weeks)
 
 TVT will:
 
@@ -106,3 +130,7 @@ After executing actions, TVT creates:
 ---
 
 <sub>_Last updated: April 18, 2025_</sub>
+
+```
+
+```

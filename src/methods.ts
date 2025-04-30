@@ -5,7 +5,6 @@ import {
   AccountAllowanceApproveTransaction,
   ContractExecuteTransaction,
   ContractFunctionParameters,
-  EthereumTransaction,
   Hbar,
   HbarUnit,
   TransferTransaction,
@@ -117,8 +116,18 @@ export class Methods {
   }
 
   async saveDetailsReport(hedera: Hedera, folderPath: string) {
-    const headers = ['Id', 'Type', 'Fee(HBar)', 'Gas fee', 'Gas used', 'Hashscan link'];
+    const headers = [
+      'Id',
+      'Type',
+      'Fee(HBar)',
+      'Gas used',
+      'Gas consumed',
+      'Gas Price',
+      'Total Gas Fee',
+      'Hashscan link',
+    ];
     const rows: string[][] = [];
+
     let hashscanUrl;
     if (hedera.config.network === 'localnet') {
       hashscanUrl = `http://${hedera.config.networkIp}:8080/devnet/transaction`;
@@ -128,12 +137,35 @@ export class Methods {
 
     for (const [type, transactions] of this.data.entries()) {
       for (const transaction of transactions) {
+        let gasPrice;
+        let gasConsumed;
+        if (type === 'CONTRACT_CALL' || type === 'ETHEREUM_TRANSACTION') {
+          const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
+          const query = await this.hedera.getContractResult({
+            transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
+          });
+          gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
+
+          const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
+          gasPrice = gasFees.fees.find((fee) =>
+            type === 'CONTRACT_CALL'
+              ? fee.transaction_type === 'ContractCall'
+              : fee.transaction_type === 'EthereumTransaction'
+          )?.gas;
+        }
+
+        const totalGasFee = gasPrice && gasConsumed ? Number(gasConsumed._valueInTinybar.toString()) * gasPrice : 0;
+        if (isNaN(totalGasFee)) {
+          console.log(gasConsumed);
+        }
         rows.push([
           transaction.transactionId.split('@')[1] ?? '',
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
-          transaction.gasFee?.toString() ?? '-',
           transaction.gasUsed?.toString() ?? '-',
+          gasConsumed?.toString() ?? '-',
+          gasPrice ? Hbar.fromTinybars(gasPrice).toString() : '-',
+          totalGasFee.toString(),
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
       }
@@ -168,7 +200,7 @@ export class Methods {
 
       const avgFee = totalFee / transactions.length;
       const hbarPrice = price['hedera-hashgraph'].usd;
-      const scheduleFee = scheduledFees[type];
+      const baseScheduleFee = scheduledFees[type];
       const avgFeeInUsd = avgFee * hbarPrice;
       const feesArray = transactions
         .map((transaction) => transaction.fee.toBigNumber().toNumber())
@@ -179,21 +211,43 @@ export class Methods {
       const mediana = median(feesArray);
 
       const actlList = [
-        { type: 'Max', value: Math.abs(scheduleFee - max) },
-        { type: '25th Percentile', value: Math.abs(scheduleFee - perc25) },
-        { type: '75th Percentile', value: Math.abs(scheduleFee - perc75) },
-        { type: 'Mean', value: Math.abs(scheduleFee - avgFee) },
-        { type: 'Median', value: Math.abs(scheduleFee - mediana) },
+        { type: 'Max', value: Math.abs(baseScheduleFee - max) },
+        { type: '25th Percentile', value: Math.abs(baseScheduleFee - perc25) },
+        { type: '75th Percentile', value: Math.abs(baseScheduleFee - perc75) },
+        { type: 'Mean', value: Math.abs(baseScheduleFee - avgFee) },
+        { type: 'Median', value: Math.abs(baseScheduleFee - mediana) },
       ] as const;
       actlList.toSorted((a, b) => a.value - b.value);
       const [actl] = actlList;
       const allClosestValues = actlList.filter((v) => v.value === actl.value).map((v) => v.type);
 
+      let EVMTransactionsCount = 0;
+      let avgEVMGasFee = 0;
+      if (type === 'CONTRACT_CALL' || type === 'ETHEREUM_TRANSACTION') {
+        EVMTransactionsCount++;
+        let gasConsumed;
+        for (const transaction of transactions) {
+          const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
+          const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
+          const query = await this.hedera.getContractResult({
+            transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
+          });
+          gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
+          avgEVMGasFee +=
+            gasConsumed.toBigNumber().toNumber() *
+            (gasFees.fees.find((fee) =>
+              type === 'CONTRACT_CALL'
+                ? fee.transaction_type === 'ContractCall'
+                : (fee.transaction_type = 'EthereumTransaction')
+            )?.gas ?? 0);
+        }
+      }
+
       rows.push([
         type,
         transactions.length.toString(),
         (totalFee * hbarPrice).toString(),
-        scheduleFee.toString(),
+        baseScheduleFee.toString(),
         (scheduledFees[type] - avgFeeInUsd).toFixed(4),
         avgFeeInUsd.toString(),
         standardDeviation(feesArray).toString(),
@@ -248,6 +302,7 @@ export class Methods {
       .setFunction('set_message', new ContractFunctionParameters().addString('Hello from Hedera again!'));
     const submitExecTx = await transaction.execute(this.hedera.client);
     const record = await submitExecTx.getRecord(this.hedera.client);
+    await submitExecTx.getReceipt(this.hedera.client);
 
     return {
       fee: record.transactionFee,
@@ -279,7 +334,7 @@ export class Methods {
   }
 
   async tokenBurn(): Promise<AssumptionObject> {
-    const { nft } = await this.fungibleToken.mint();
+    const { nft } = await this.nonFungibleToken.mint();
     invariant(nft, 'Failed to create nft');
     return nft.burn();
   }

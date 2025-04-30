@@ -90,6 +90,7 @@ export class Ethers {
       throw e;
     }
     const record = await txResponse.getRecord(this.hedera.client);
+
     return {
       fee: record.transactionFee,
       transactionId: txResponse.transactionId.toString(),
