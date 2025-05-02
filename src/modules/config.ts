@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import chalk from 'chalk';
 import fs from 'fs/promises';
 import { httpPing } from '../utils/http-ping';
 import { ConfigPrefix } from './hedera';
-import { input } from '@inquirer/prompts';
+import { getArg } from '../utils/get-arg';
+import { invariant } from '../utils/invariant';
 
 const networkOptions = ['mainnet', 'testnet', 'localnet'] as const;
 export type Network = (typeof networkOptions)[number];
@@ -95,17 +95,14 @@ export class Config {
   private static async setLocalNetwork() {
     const validateNetworkPattern =
       /^(?:(https?:\/\/)([^\s\/$.?#].[^\s]*)|(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})$/i;
-    return input({
-      message: 'Input local network address, eg.',
-      required: true,
-      validate: function (v) {
-        return new Promise(async (resolve, reject) => {
-          if (!v) reject();
-          const isValid = validateNetworkPattern.test(v);
-          if (!isValid) reject();
-          await Promise.all([httpPing({ address: `${v}:5600` }), httpPing({ address: `${v}:50211` })]);
-          resolve(true);
-        });
+    return getArg({
+      argName: 'network-address',
+      validate: async (v) => {
+        invariant(v, 'You have to pass network-address');
+        const isValid = validateNetworkPattern.test(v);
+        invariant(isValid, 'Network address is not valid');
+        await Promise.all([httpPing({ address: `${v}:5600` }), httpPing({ address: `${v}:50211` })]);
+        return v;
       },
     });
   }
@@ -114,27 +111,19 @@ export class Config {
     const shortcut = network === 'localnet' ? 'LOCAL' : network === 'mainnet' ? 'MAINNET' : 'TESTNET';
     const prefix = `TVT_${shortcut}` as const;
 
-    let operatorId = envs[`${prefix}_OPERATOR_ID`];
-    if (!operatorId) {
-      console.log(chalk.yellow('Operator id is unset'));
-      const id = await input({
-        message: 'Input operator id',
-        required: true,
-        validate: (v) => !!v,
-      });
-      operatorId = id;
-    }
+    const operatorId =
+      (await getArg({
+        argName: 'operator-id',
+        validate: (v) => v,
+      })) ?? envs[`${prefix}_OPERATOR_ID`];
+    invariant(operatorId, 'You have to pass operator-id in args');
 
-    let operatorKey = envs[`${prefix}_OPERATOR_KEY`];
-    if (!operatorKey) {
-      console.log(chalk.yellow('Operator key is unset'));
-      const key = await input({
-        message: 'Input operator key',
-        required: true,
-        validate: (v) => !!v,
-      });
-      operatorKey = key;
-    }
+    const operatorKey =
+      (await getArg({
+        argName: 'operator-key',
+        validate: (v) => v,
+      })) ?? envs[`${prefix}_OPERATOR_KEY`];
+    invariant(operatorKey, 'You have to pass operator-key in args');
 
     const JSON_TO_SAVE = {
       [`${prefix}_OPERATOR_ID`]: operatorId,

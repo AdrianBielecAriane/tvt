@@ -18,7 +18,7 @@ import { z } from 'zod';
 
 configDotenv();
 
-const cronPattern = getArg({
+const cronPattern = await getArg({
   argName: 'scheduler',
   validate: (value) => {
     if (!value) return;
@@ -28,17 +28,21 @@ const cronPattern = getArg({
   },
 });
 
-const quantity = getArg({
+const quantity = await getArg({
   argName: 'quantity',
   validate: (value) => {
-    return z.preprocess((v) => Number(v), z.number()).parse(value);
+    const isValid = z.preprocess((v) => Number(v), z.number()).safeParse(value);
+    invariant(!isValid.error, 'Quantity is not valid number, pass --quantity in args');
+    return isValid.data;
   },
 });
 
-const network = getArg({
+const network = await getArg({
   argName: 'network',
   validate: (value) => {
-    return z.enum(['mainnet', 'testnet', 'localnet']).parse(value);
+    const isValid = z.enum(['mainnet', 'testnet', 'localnet']).safeParse(value);
+    invariant(!isValid.error, 'Network is not valid enum, pass --network in args');
+    return isValid.data;
   },
 });
 const timeSymbolSchema = z.union([z.literal('d'), z.literal('h'), z.literal('m'), z.literal('w')]);
@@ -107,25 +111,39 @@ const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionOb
 
 let failedRequests: (typeof actions)[number][] = [];
 
+interface FireActions {
+  requests: (typeof actions)[number][];
+  isRetry?: boolean;
+  numberOfActions: number;
+}
+
+let retries = 0;
+let failedActionCount = 0;
+const fireActions = async ({ numberOfActions, requests, isRetry }: FireActions) => {
+  let failedRequests: (typeof actions)[number][] = [];
+  for (const failedAction of requests) {
+    logger.info(
+      `${failedAction} is called. ${++failedActionCount} / ${numberOfActions}.${isRetry ? `Attempt ${retries++}` : ''}`
+    );
+    try {
+      await methods.storeDataWrapper(mappedMethods[failedAction]);
+    } catch (e) {
+      logger.error(`Failed action ${failedAction}, waiting 2.5s before start again`);
+      if (e instanceof Error) {
+        logger.error(e.message);
+      }
+      failedRequests.push(failedAction);
+      await sleep(2500);
+    }
+  }
+  return failedRequests;
+};
+
 const mainMethod = async () => {
-  let actionCount = 0;
   await Promise.all(
     chunkedActions.map((actions) => {
       return new Promise(async (resolve) => {
-        for (const action of actions) {
-          logger.info(`${action} is called. ${++actionCount} / ${allActions.length}`);
-
-          try {
-            await methods.storeDataWrapper(mappedMethods[action]);
-          } catch (e) {
-            logger.error(`Failed action ${action}, waiting 2.5s before start again`);
-            if (e instanceof Error) {
-              logger.error(e.message);
-            }
-            failedRequests.push(action);
-            await sleep(2500);
-          }
-        }
+        failedRequests = await fireActions({ requests: actions, numberOfActions: allActions.length });
         resolve(true);
       });
     })
@@ -138,22 +156,9 @@ const mainMethod = async () => {
 
   let retries = 0;
   while (retries++ < 3) {
-    let failedActionCount = 0;
+    failedActionCount = 0;
     const requests = [...failedRequests];
-    failedRequests = [];
-    for (const failedAction of requests) {
-      logger.info(`${failedAction} is called. ${++failedActionCount} / ${requests.length}. Attempt ${retries}`);
-      try {
-        await methods.storeDataWrapper(mappedMethods[failedAction]);
-      } catch (e) {
-        logger.error(`Failed action ${failedAction}, waiting 2.5s before start again`);
-        if (e instanceof Error) {
-          logger.error(e.message);
-        }
-        failedRequests.push(failedAction);
-        await sleep(2500);
-      }
-    }
+    failedRequests = await fireActions({ requests, isRetry: true, numberOfActions: requests.length });
   }
 
   if (!fsSync.existsSync('reports')) {

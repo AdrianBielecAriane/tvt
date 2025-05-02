@@ -16,17 +16,13 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@bartheleway/inquirer-table-multiple": "^1.0.1",
     "@hashgraph/sdk": "^2.62.0",
-    "@inquirer/core": "^10.1.10",
-    "@inquirer/prompts": "^7.5.0",
     "chalk": "^5.4.1",
     "cron": "^4.3.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
     "ethereumjs-util": "^7.1.5",
     "ethers": "^6.13.5",
-    "inquirer-table-prompt": "^0.2.1",
     "json-2-csv": "^5.5.9",
     "remeda": "^2.21.2",
     "rlp": "^3.0.0",

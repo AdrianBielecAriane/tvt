@@ -1,8 +1,6 @@
-import { invariant } from './invariant';
-
 interface Config<T> {
   argName: string;
-  validate: (value: string | undefined) => T;
+  validate: (value: string | undefined) => T | Promise<T>;
 }
 
 export const getArg = <T>({ argName, validate }: Config<T>) => {

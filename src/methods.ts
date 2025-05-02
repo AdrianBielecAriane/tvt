@@ -139,6 +139,7 @@ export class Methods {
       for (const transaction of transactions) {
         let gasPrice;
         let gasConsumed;
+        // Get gas price here, if we'd request it immediatly after creating transaction we may receive an error
         if (type === 'CONTRACT_CALL' || type === 'ETHEREUM_TRANSACTION') {
           const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
           const query = await this.hedera.getContractResult({
@@ -155,9 +156,6 @@ export class Methods {
         }
 
         const totalGasFee = gasPrice && gasConsumed ? Number(gasConsumed._valueInTinybar.toString()) * gasPrice : 0;
-        if (isNaN(totalGasFee)) {
-          console.log(gasConsumed);
-        }
         rows.push([
           transaction.transactionId.split('@')[1] ?? '',
           type,
@@ -165,7 +163,7 @@ export class Methods {
           transaction.gasUsed?.toString() ?? '-',
           gasConsumed?.toString() ?? '-',
           gasPrice ? Hbar.fromTinybars(gasPrice).toString() : '-',
-          totalGasFee.toString(),
+          Hbar.fromTinybars(totalGasFee).toString(),
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
       }
@@ -220,28 +218,6 @@ export class Methods {
       actlList.toSorted((a, b) => a.value - b.value);
       const [actl] = actlList;
       const allClosestValues = actlList.filter((v) => v.value === actl.value).map((v) => v.type);
-
-      let EVMTransactionsCount = 0;
-      let avgEVMGasFee = 0;
-      if (type === 'CONTRACT_CALL' || type === 'ETHEREUM_TRANSACTION') {
-        EVMTransactionsCount++;
-        let gasConsumed;
-        for (const transaction of transactions) {
-          const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
-          const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
-          const query = await this.hedera.getContractResult({
-            transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
-          });
-          gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
-          avgEVMGasFee +=
-            gasConsumed.toBigNumber().toNumber() *
-            (gasFees.fees.find((fee) =>
-              type === 'CONTRACT_CALL'
-                ? fee.transaction_type === 'ContractCall'
-                : (fee.transaction_type = 'EthereumTransaction')
-            )?.gas ?? 0);
-        }
-      }
 
       rows.push([
         type,
