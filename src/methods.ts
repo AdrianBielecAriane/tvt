@@ -160,7 +160,7 @@ export class Methods {
           transaction.transactionId.split('@')[1] ?? '',
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
-          transaction.gasUsed?.toString() ?? '-',
+          transaction.gasUsed ? Hbar.fromTinybars(transaction.gasUsed).toString() : '-',
           gasConsumed?.toString() ?? '-',
           gasPrice ? Hbar.fromTinybars(gasPrice).toString() : '-',
           Hbar.fromTinybars(totalGasFee).toString(),
@@ -196,6 +196,26 @@ export class Methods {
         return acc + fee.toBigNumber().toNumber();
       }, 0);
 
+      let totalEstimatedGasFee = 0;
+      if (['ETHEREUM_TRANSACTION', 'CONTRACT_CALL'].includes(type)) {
+        for (const transaction of transactions) {
+          const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
+          const query = await this.hedera.getContractResult({
+            transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
+          });
+          const gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar)._valueInTinybar.toNumber();
+
+          const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
+          const gasPrice =
+            gasFees.fees.find((fee) =>
+              type === 'CONTRACT_CALL'
+                ? fee.transaction_type === 'ContractCall'
+                : fee.transaction_type === 'EthereumTransaction'
+            )?.gas ?? 0;
+          totalEstimatedGasFee += Hbar.fromTinybars(gasPrice)._valueInTinybar.toNumber() * gasConsumed;
+        }
+      }
+
       const avgFee = totalFee / transactions.length;
       const hbarPrice = price['hedera-hashgraph'].usd;
       const baseScheduleFee = scheduledFees[type];
@@ -218,13 +238,15 @@ export class Methods {
       actlList.toSorted((a, b) => a.value - b.value);
       const [actl] = actlList;
       const allClosestValues = actlList.filter((v) => v.value === actl.value).map((v) => v.type);
+      let scheduleFeeDifference = avgFeeInUsd - scheduledFees[type];
+      if (totalEstimatedGasFee > 0) scheduleFeeDifference -= totalEstimatedGasFee / transactions.length;
 
       rows.push([
         type,
         transactions.length.toString(),
         (totalFee * hbarPrice).toString(),
         baseScheduleFee.toString(),
-        (scheduledFees[type] - avgFeeInUsd).toFixed(4),
+        (avgFeeInUsd - scheduledFees[type] - totalEstimatedGasFee).toFixed(4),
         avgFeeInUsd.toString(),
         standardDeviation(feesArray).toString(),
         max.toString(),
