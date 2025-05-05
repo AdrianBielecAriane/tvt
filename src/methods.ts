@@ -182,10 +182,10 @@ export class Methods {
       'Schedule fee difference(USD)',
       'Average Fee (USD)',
       'St.Dev',
-      'Max',
-      'Perc 25',
-      'Median',
-      'Perc 75',
+      'Max(USD)',
+      'Perc 25(USD)',
+      'Median(USD)',
+      'Perc 75(USD)',
       'Actl Closer to',
     ];
 
