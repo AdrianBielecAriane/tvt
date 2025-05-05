@@ -229,24 +229,28 @@ export class Methods {
       const mediana = median(feesArray);
 
       const actlList = [
-        { type: 'Max', value: Math.abs(baseScheduleFee - max) },
-        { type: '25th Percentile', value: Math.abs(baseScheduleFee - perc25) },
-        { type: '75th Percentile', value: Math.abs(baseScheduleFee - perc75) },
-        { type: 'Mean', value: Math.abs(baseScheduleFee - avgFee) },
-        { type: 'Median', value: Math.abs(baseScheduleFee - mediana) },
+        { type: 'Max', value: Math.abs(baseScheduleFee - max) * hbarPrice },
+        { type: '25th Percentile', value: Math.abs(baseScheduleFee - perc25) * hbarPrice },
+        { type: '75th Percentile', value: Math.abs(baseScheduleFee - perc75) * hbarPrice },
+        { type: 'Mean', value: Math.abs(baseScheduleFee - avgFee) * hbarPrice },
+        { type: 'Median', value: Math.abs(baseScheduleFee - mediana) * hbarPrice },
       ] as const;
       actlList.toSorted((a, b) => a.value - b.value);
       const [actl] = actlList;
       const allClosestValues = actlList.filter((v) => v.value === actl.value).map((v) => v.type);
-      let scheduleFeeDifference = avgFeeInUsd - scheduledFees[type];
-      if (totalEstimatedGasFee > 0) scheduleFeeDifference -= totalEstimatedGasFee / transactions.length;
+      let scheduleFeeDifference = baseScheduleFee - avgFeeInUsd;
+      if (totalEstimatedGasFee > 0)
+        scheduleFeeDifference +=
+          Hbar.fromTinybars(totalEstimatedGasFee / transactions.length)
+            .toBigNumber()
+            .toNumber() * hbarPrice;
 
       rows.push([
         type,
         transactions.length.toString(),
         (totalFee * hbarPrice).toString(),
         baseScheduleFee.toString(),
-        (avgFeeInUsd - scheduledFees[type] - totalEstimatedGasFee).toFixed(4),
+        scheduleFeeDifference.toFixed(4),
         avgFeeInUsd.toString(),
         standardDeviation(feesArray).toString(),
         max.toString(),
