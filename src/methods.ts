@@ -223,17 +223,17 @@ export class Methods {
       const feesArray = transactions
         .map((transaction) => transaction.fee.toBigNumber().toNumber())
         .sort((a, b) => a - b);
-      const max = Math.max(...feesArray);
-      const perc25 = quantile(feesArray, 0.25);
-      const perc75 = quantile(feesArray, 0.75);
-      const mediana = median(feesArray);
+      const max = Math.max(...feesArray) * hbarPrice;
+      const perc25 = quantile(feesArray, 0.25) * hbarPrice;
+      const perc75 = quantile(feesArray, 0.75) * hbarPrice;
+      const mediana = median(feesArray) * hbarPrice;
 
       const actlList = [
-        { type: 'Max', value: Math.abs(baseScheduleFee - max) * hbarPrice },
-        { type: '25th Percentile', value: Math.abs(baseScheduleFee - perc25) * hbarPrice },
-        { type: '75th Percentile', value: Math.abs(baseScheduleFee - perc75) * hbarPrice },
-        { type: 'Mean', value: Math.abs(baseScheduleFee - avgFee) * hbarPrice },
-        { type: 'Median', value: Math.abs(baseScheduleFee - mediana) * hbarPrice },
+        { type: 'Max', value: Math.abs(baseScheduleFee - max * hbarPrice) },
+        { type: '25th Percentile', value: Math.abs(baseScheduleFee - perc25 * hbarPrice) },
+        { type: '75th Percentile', value: Math.abs(baseScheduleFee - perc75 * hbarPrice) },
+        { type: 'Mean', value: Math.abs(baseScheduleFee - avgFee * hbarPrice) },
+        { type: 'Median', value: Math.abs(baseScheduleFee - mediana * hbarPrice) },
       ] as const;
       actlList.toSorted((a, b) => a.value - b.value);
       const [actl] = actlList;
