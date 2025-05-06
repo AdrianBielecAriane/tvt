@@ -7,6 +7,7 @@ import {
   ContractFunctionParameters,
   Hbar,
   HbarUnit,
+  NftId,
   TransferTransaction,
 } from '@hashgraph/sdk';
 import { HederaTopic } from './modules/hedera-topic';
@@ -23,7 +24,9 @@ import { invariant } from './utils/invariant';
 import { quantile, standardDeviation, median } from 'simple-statistics';
 
 const transactionTypes = [
-  'CRYPTO_TRANSFER',
+  'CRYPTO_TRANSFER(HBar)',
+  'CRYPTO_TRANSFER(NFT)',
+  'CRYPTO_TRANSFER(FT)',
   'CONTRACT_CALL',
   'CONSENSUS_SUBMIT_MESSAGE',
   'TOKEN_MINT(NFT)',
@@ -91,13 +94,13 @@ export class Methods {
     console.clear();
     console.log('Initializing CLI');
     const prefix = hedera.getPrefix();
-    const receiver = await HederaWallet.init(hedera);
     const topic = await HederaTopic.init(hedera);
     const contract = await HederaContract.init(hedera);
     const { fungibleToken, nonFungibleToken, nft } = await HederaToken.init(hedera);
     invariant(nft, 'NFT not exist');
     const file = await HederaFile.init(hedera);
     const ethers = await Ethers.create(hedera);
+    const receiver = await HederaWallet.init(hedera, nonFungibleToken, fungibleToken);
 
     const config = {
       [`${prefix}_WALLET_ID`]: receiver.accountId.toString(),
@@ -116,16 +119,7 @@ export class Methods {
   }
 
   async saveDetailsReport(hedera: Hedera, folderPath: string) {
-    const headers = [
-      'Id',
-      'Type',
-      'Fee(HBar)',
-      'Gas used',
-      'Gas consumed',
-      'Gas Price',
-      'Total Gas Fee',
-      'Hashscan link',
-    ];
+    const headers = ['Id', 'Type', 'Fee(HBar)', 'Gas used', 'Total Gas Fee', 'Hashscan link'];
     const rows: string[][] = [];
 
     let hashscanUrl;
@@ -161,8 +155,6 @@ export class Methods {
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
           transaction.gasUsed ? Hbar.fromTinybars(transaction.gasUsed).toString() : '-',
-          gasConsumed?.toString() ?? '-',
-          gasPrice ? Hbar.fromTinybars(gasPrice).toString() : '-',
           Hbar.fromTinybars(totalGasFee).toString(),
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
@@ -178,8 +170,11 @@ export class Methods {
       'Transaction',
       'Count',
       'Total fee (USD)',
+      'AVG Gas price (USD)',
+      'AVG Gas consumed (USD)',
       'Schedule fee (USD)',
       'Schedule fee difference(USD)',
+      'Schedule fee difference (%)',
       'Average Fee (USD)',
       'St.Dev',
       'Max(USD)',
@@ -197,6 +192,8 @@ export class Methods {
       }, 0);
 
       let totalEstimatedGasFee = 0;
+      let totalGasPrice = 0;
+      let totalGasConsumed = 0;
       if (['ETHEREUM_TRANSACTION', 'CONTRACT_CALL'].includes(type)) {
         for (const transaction of transactions) {
           const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
@@ -212,12 +209,23 @@ export class Methods {
                 ? fee.transaction_type === 'ContractCall'
                 : fee.transaction_type === 'EthereumTransaction'
             )?.gas ?? 0;
+          totalGasPrice += gasPrice;
+          totalGasConsumed += gasConsumed;
           totalEstimatedGasFee += Hbar.fromTinybars(gasPrice)._valueInTinybar.toNumber() * gasConsumed;
         }
       }
 
-      const avgFee = totalFee / transactions.length;
       const hbarPrice = price['hedera-hashgraph'].usd;
+      const avgGasConsumedUSD =
+        Hbar.fromTinybars(totalGasConsumed / transactions.length)
+          .toBigNumber()
+          .toNumber() * hbarPrice;
+      const avgGasPriceUSD =
+        Hbar.fromTinybars(totalGasPrice / transactions.length)
+          .toBigNumber()
+          .toNumber() * hbarPrice;
+
+      const avgFee = totalFee / transactions.length;
       const baseScheduleFee = scheduledFees[type];
       const avgFeeInUsd = avgFee * hbarPrice;
       const feesArray = transactions
@@ -249,8 +257,11 @@ export class Methods {
         type,
         transactions.length.toString(),
         (totalFee * hbarPrice).toString(),
+        avgGasPriceUSD.toString(),
+        avgGasConsumedUSD.toString(),
         baseScheduleFee.toString(),
         scheduleFeeDifference.toFixed(4),
+        ((scheduleFeeDifference * 100) / baseScheduleFee).toFixed(2),
         avgFeeInUsd.toString(),
         standardDeviation(feesArray).toString(),
         max.toString(),
@@ -277,6 +288,44 @@ export class Methods {
 
   async fileAppend(): Promise<AssumptionObject> {
     return this.file.append();
+  }
+
+  async transferTokenNft(): Promise<AssumptionObject> {
+    const { nft } = await this.nonFungibleToken.mint();
+    invariant(nft, 'Invalid nft');
+    let transaction = new TransferTransaction()
+      .addNftTransfer(
+        new NftId(this.nonFungibleToken.tokenId, nft.serial),
+        this.hedera.operatorId,
+        this.receiver.accountId
+      )
+      .freezeWith(this.hedera.client);
+    const txTransaction = await transaction.sign(this.hedera.operatorKey);
+    const signedByReceiver = await txTransaction.sign(this.receiver.privateKey);
+    const txResponse = await signedByReceiver.execute(this.hedera.client);
+    const record = await txResponse.getRecord(this.hedera.client);
+    return {
+      fee: record.transactionFee,
+      transactionId: txResponse.transactionId.toString(),
+      type: 'CRYPTO_TRANSFER(NFT)',
+    };
+  }
+
+  async transferTokenFt(): Promise<AssumptionObject> {
+    await this.fungibleToken.mint();
+    let transaction = new TransferTransaction()
+      .addTokenTransfer(this.fungibleToken.tokenId, this.hedera.operatorId, -1)
+      .addTokenTransfer(this.fungibleToken.tokenId, this.receiver.accountId, 1)
+      .freezeWith(this.hedera.client);
+    const txTransaction = await transaction.sign(this.hedera.operatorKey);
+    const signedByReceiver = await txTransaction.sign(this.receiver.privateKey);
+    const txResponse = await signedByReceiver.execute(this.hedera.client);
+    const record = await txResponse.getRecord(this.hedera.client);
+    return {
+      fee: record.transactionFee,
+      transactionId: txResponse.transactionId.toString(),
+      type: 'CRYPTO_TRANSFER(FT)',
+    };
   }
 
   async allowanceApproveTransaction(): Promise<AssumptionObject> {
@@ -327,7 +376,11 @@ export class Methods {
     const signedTx = await transaction.sign(this.hedera.operatorKey);
     const txResponse = await signedTx.execute(this.hedera.client);
     const record = await txResponse.getRecord(this.hedera.client);
-    return { fee: record.transactionFee, transactionId: txResponse.transactionId.toString(), type: 'CRYPTO_TRANSFER' };
+    return {
+      fee: record.transactionFee,
+      transactionId: txResponse.transactionId.toString(),
+      type: 'CRYPTO_TRANSFER(HBar)',
+    };
   }
 
   async createWallet(): Promise<AssumptionObject> {
@@ -342,7 +395,7 @@ export class Methods {
   }
 
   async tokenMint(type: 'NFT' | 'FT'): Promise<AssumptionObject> {
-    const tokenToMint = type === 'NFT' ? this.fungibleToken : this.nonFungibleToken;
+    const tokenToMint = type === 'NFT' ? this.nonFungibleToken : this.fungibleToken;
     const { details } = await tokenToMint.mint();
     return details;
   }

@@ -1,7 +1,6 @@
 import {
   AccountCreateTransaction,
   AccountId,
-  AccountUpdateTransaction,
   Hbar,
   HbarUnit,
   PrivateKey,
@@ -51,13 +50,15 @@ export class HederaWallet {
     };
   }
 
-  static async init(hedera: Hedera) {
+  static async init(hedera: Hedera, nft: HederaToken, ft: HederaToken) {
     const prefix = hedera.getPrefix();
     const walletId = getEnv({ prefix, key: 'WALLET_ID' });
     if (walletId) {
       return new HederaWallet(AccountId.fromString(walletId), hedera.operatorKey, hedera);
     }
     const { wallet } = await HederaWallet.create(hedera, 2);
+    await wallet.associateToken(nft);
+    await wallet.associateToken(ft);
     return wallet;
   }
 
@@ -92,10 +93,13 @@ export class HederaWallet {
     transaction = transaction.freezeWith(this.hedera.client);
     const signedTx = await transaction.sign(this.privateKey);
     const txResponse = await signedTx.execute(this.hedera.client);
-    const receipt = await txResponse.getReceipt(this.hedera.client);
-    const transactionStatus = receipt.status;
+    await txResponse.getReceipt(this.hedera.client);
     const record = await txResponse.getRecord(this.hedera.client);
-    return { fee: record.transactionFee, type: 'CRYPTO_TRANSFER', transactionId: txResponse.transactionId.toString() };
+    return {
+      fee: record.transactionFee,
+      type: 'CRYPTO_TRANSFER(HBar)',
+      transactionId: txResponse.transactionId.toString(),
+    };
   }
 
   async associateToken(token: HederaToken): Promise<AssumptionObject> {

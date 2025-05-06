@@ -76,6 +76,8 @@ export const actions = [
   'Approve allowance',
   'Eth transaction',
   'Transfer HBar',
+  'Transfer token(NFT)',
+  'Transfer token(FT)',
   'TOKEN ASSOCIATE',
   'FILE APPEND',
   'Call contract',
@@ -97,6 +99,8 @@ const chunkedActions = chunk(allActions, Math.ceil(allActions.length / 3));
 
 const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionObject>> = {
   'Approve allowance': methods.allowanceApproveTransaction,
+  'Transfer token(NFT)': methods.transferTokenNft,
+  'Transfer token(FT)': methods.transferTokenFt,
   'Burn token': methods.tokenBurn,
   'Call contract': methods.contractCall,
   'Create account': methods.createWallet,
@@ -161,18 +165,18 @@ const mainMethod = async () => {
     failedRequests = await fireActions({ requests, isRetry: true, numberOfActions: requests.length });
   }
 
-  if (!fsSync.existsSync('reports')) {
-    await fs.mkdir('reports', { recursive: true });
+  if (!fsSync.existsSync(path.join(os.homedir(), 'tvt', 'reports'))) {
+    await fs.mkdir(path.join(os.homedir(), 'tvt', 'reports'), { recursive: true });
   }
 
   const time = new Date();
-  const reportsPath = path.join('reports', format(time, 'ddMMyyyy-HHmm'));
+  const reportsPath = path.join(os.homedir(), 'tvt', 'reports', format(time, 'ddMMyyyy-HHmm'));
   await fs.mkdir(reportsPath);
 
   console.log('\n\n');
   logger.info('Saving report');
   await Promise.all([methods.saveReport(reportsPath), methods.saveDetailsReport(hedera, reportsPath)]);
-  console.log(`file://${path.join(os.homedir(), reportsPath)}`);
+  console.log(`file://${reportsPath}`);
 };
 
 try {

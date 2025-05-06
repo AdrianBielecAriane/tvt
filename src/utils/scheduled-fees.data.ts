@@ -1,7 +1,9 @@
 import { TransactionType } from '../methods';
 
 export const scheduledFees = {
-  CRYPTO_TRANSFER: 0.0001,
+  ['CRYPTO_TRANSFER(HBar)']: 0.0001,
+  ['CRYPTO_TRANSFER(NFT)']: 0.0001,
+  ['CRYPTO_TRANSFER(FT)']: 0.0001,
   CONTRACT_CALL: 0.0085,
   CONSENSUS_SUBMIT_MESSAGE: 0.0001,
   ['TOKEN_MINT(NFT)']: 0.02,

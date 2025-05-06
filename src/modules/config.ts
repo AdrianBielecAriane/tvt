@@ -13,6 +13,7 @@ type LocalConfig = {
   operatorId: string;
   networkIp: string;
   operatorKey: string;
+  operatorKeyType: 'ED25519' | 'ECDSA';
 };
 
 type ExternalConfig = {
@@ -20,11 +21,13 @@ type ExternalConfig = {
   operatorId: string;
   networkIp?: never;
   operatorKey: string;
+  operatorKeyType: 'ED25519' | 'ECDSA';
 };
 
 const configSchema = z.object({
   TVT_LOCAL_OPERATOR_ID: z.string().optional(),
   TVT_LOCAL_OPERATOR_KEY: z.string().optional(),
+  TVT_LOCAL_OPERATOR_KEY_TYPE: z.enum(['ED25519', 'ECDSA']).optional(),
   TVT_LOCAL_NETWORK_IP: z.string().optional(),
   TVT_LOCAL_TOPIC_ID: z.string().optional(),
   TVT_LOCAL_CONTRACT_FILE_ID: z.string().optional(),
@@ -36,6 +39,7 @@ const configSchema = z.object({
 
   TVT_TESTNET_OPERATOR_ID: z.string().optional(),
   TVT_TESTNET_OPERATOR_KEY: z.string().optional(),
+  TVT_TESTNET_OPERATOR_KEY_TYPE: z.enum(['ED25519', 'ECDSA']).optional(),
   TVT_TESTNET_TOPIC_ID: z.string().optional(),
   TVT_TESTNET_CONTRACT_FILE_ID: z.string().optional(),
   TVT_TESTNET_CONTRACT_ID: z.string().optional(),
@@ -46,6 +50,7 @@ const configSchema = z.object({
 
   TVT_MAINNET_OPERATOR_ID: z.string().optional(),
   TVT_MAINNET_OPERATOR_KEY: z.string().optional(),
+  TVT_MAINNET_OPERATOR_KEY_TYPE: z.enum(['ED25519', 'ECDSA']).optional(),
   TVT_MAINNET_TOPIC_ID: z.string().optional(),
   TVT_MAINNET_CONTRACT_FILE_ID: z.string().optional(),
   TVT_MAINNET_CONTRACT_ID: z.string().optional(),
@@ -118,6 +123,14 @@ export class Config {
       })) ?? envs[`${prefix}_OPERATOR_ID`];
     invariant(operatorId, 'You have to pass operator-id in args');
 
+    const keyType = await getArg({
+      argName: 'key-type',
+      validate: (v) => {
+        if (!v) return 'ECDSA';
+        return z.enum(['ED25519', 'ECDSA']).parse(v.toUpperCase());
+      },
+    });
+
     const operatorKey =
       (await getArg({
         argName: 'operator-key',
@@ -128,9 +141,10 @@ export class Config {
     const JSON_TO_SAVE = {
       [`${prefix}_OPERATOR_ID`]: operatorId,
       [`${prefix}_OPERATOR_KEY`]: operatorKey,
+      [`${prefix}_OPERATOR_KEY_TYPE`]: keyType,
     };
 
-    return { operatorId, operatorKey, JSON_TO_SAVE };
+    return { operatorId, operatorKey, JSON_TO_SAVE, keyType };
   }
 
   private static async initLocalNetwork() {
@@ -138,8 +152,14 @@ export class Config {
     if (!address) {
       address = await this.setLocalNetwork();
     }
-    const { operatorId, operatorKey, JSON_TO_SAVE } = await Config.initCredentials('localnet');
-    return { address, operatorId, operatorKey, JSON_TO_SAVE: { ...JSON_TO_SAVE, TVT_LOCAL_NETWORK_IP: address } };
+    const { operatorId, operatorKey, JSON_TO_SAVE, keyType } = await Config.initCredentials('localnet');
+    return {
+      address,
+      operatorId,
+      operatorKey,
+      keyType,
+      JSON_TO_SAVE: { ...JSON_TO_SAVE, TVT_LOCAL_NETWORK_IP: address },
+    };
   }
 
   static async create(network: Network) {
@@ -148,16 +168,22 @@ export class Config {
     switch (network) {
       case 'localnet':
         {
-          const { address, operatorId, operatorKey, JSON_TO_SAVE } = await this.initLocalNetwork();
-          configInitializer = { network: 'localnet', networkIp: address, operatorId, operatorKey };
+          const { address, operatorId, operatorKey, JSON_TO_SAVE, keyType } = await this.initLocalNetwork();
+          configInitializer = {
+            network: 'localnet',
+            networkIp: address,
+            operatorId,
+            operatorKey,
+            operatorKeyType: keyType,
+          };
           newConfigFile = JSON_TO_SAVE;
         }
         break;
       case 'mainnet':
       case 'testnet':
         {
-          const { operatorId, operatorKey, JSON_TO_SAVE } = await this.initCredentials(network);
-          configInitializer = { network, operatorId, operatorKey };
+          const { operatorId, operatorKey, JSON_TO_SAVE, keyType } = await this.initCredentials(network);
+          configInitializer = { network, operatorId, operatorKey, operatorKeyType: keyType };
           newConfigFile = JSON_TO_SAVE;
         }
         break;

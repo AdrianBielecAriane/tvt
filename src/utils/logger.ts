@@ -1,5 +1,7 @@
 import chalk from 'chalk';
+import path from 'path';
 import winston, { transports } from 'winston';
+import os from 'os';
 
 const { combine, timestamp, printf } = winston.format;
 const consoleFormat = printf(({ level, message, timestamp }) => {
@@ -32,7 +34,7 @@ export const logger = winston.createLogger({
   defaultMeta: { service: 'logger' },
   transports: [
     new transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
+    new winston.transports.File({ filename: path.join(os.homedir(), 'tvt', 'logs', 'error.log'), level: 'error' }),
+    new winston.transports.File({ filename: path.join(os.homedir(), 'tvt', 'logs', 'combined.log') }),
   ],
 });

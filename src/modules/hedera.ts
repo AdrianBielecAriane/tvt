@@ -44,7 +44,11 @@ export class Hedera {
     }
 
     this.operatorId = AccountId.fromString(config.operatorId);
-    this.operatorKey = PrivateKey.fromStringECDSA(config.operatorKey);
+    if (config.operatorKeyType === 'ECDSA') {
+      this.operatorKey = PrivateKey.fromStringECDSA(config.operatorKey);
+    } else {
+      this.operatorKey = PrivateKey.fromStringED25519(config.operatorKey);
+    }
 
     this.client.setOperator(this.operatorId, this.operatorKey);
     if (this.config.network === 'mainnet') {

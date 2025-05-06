@@ -95,10 +95,13 @@ export class HederaToken {
   }
 
   async mint(): Promise<Mint> {
-    let mintTx = new TokenMintTransaction()
-      .setTokenId(this.tokenId)
-      .addMetadata(new Uint8Array(Buffer.from(R.randomString(19))))
-      .freezeWith(this.hedera.client);
+    let mintTx = new TokenMintTransaction().setTokenId(this.tokenId);
+    if (this.type === 'NFT') {
+      mintTx = mintTx.addMetadata(new Uint8Array(Buffer.from('ipfs://QmY2b5e5X5W2X5W2X5W2X5W2X5W2X5W2X5W2X5W2X')));
+    } else {
+      mintTx = mintTx.setAmount(10);
+    }
+    mintTx = mintTx.freezeWith(this.hedera.client);
 
     const signedTx = await mintTx.sign(this.hedera.operatorKey);
     let mintTxSubmit = await signedTx.execute(this.hedera.client);
