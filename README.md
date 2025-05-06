@@ -46,6 +46,8 @@ docker build -t tvt .
 docker run tvt --network=testnet --quantity=1
 ```
 
+All logs are saved by default at your home dir in `tvt` folder.
+
 ### Args
 
 Command allows us to insert such commands:
@@ -75,8 +77,11 @@ Command allows us to insert such commands:
 - --stop-after
   - Allowed time formats are: m, h, d, w
   - Tha value must be in format f.e 2w (then scheduler will be stopped after 2 weeks)
-
-TVT will:
+- --key-type
+  - ECDSA(defauly),
+  - ED25519
+    You can change which key you would like to use your operator
+    TVT will:
 
 1. Ask for network (Mainnet/Testnet/Localnet)
 2. Prompt for Hedera Account ID and Private Key
