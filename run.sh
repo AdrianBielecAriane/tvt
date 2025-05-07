@@ -69,9 +69,19 @@ else
   echo "Scheduler not added."
 fi
 
+read -p "Do you want to deattach a container? (y/n): " dettach
+if [[ "$dettach" =~ ^[Yy]$ ]]; then
+    detach_flag="-d"
+    else
+    detach_flag=""
+fi
 
+docker_command=("sudo" "docker" "run")
+if [ -n "$detach_flag" ]; then
+  docker_command+=("$detach_flag")
+fi
 
-docker_command=("sudo" "docker" "run" "-v" "$SCRIPT_DIR/reports:/app/reports" "-v" "$SCRIPT_DIR/config.json:/app/config.json" "-v" "$SCRIPT_DIR/logs:/app/logs" "tvt" "--network=$network_cfg" "--quantity=$quantity" "--operator-id=$operator_id" "--operator-key=$operator_key" "--key-type=$user_operator_key_type")
+docker_command+=("-v" "$SCRIPT_DIR/reports:/app/reports" "-v" "$SCRIPT_DIR/config.json:/app/config.json" "-v" "$SCRIPT_DIR/logs:/app/logs" "tvt" "--network=$network_cfg" "--quantity=$quantity" "--operator-id=$operator_id" "--operator-key=$operator_key" "--key-type=$user_operator_key_type")
 
 # Append optional arguments if set
 if [[ -n "$scheduler_arg" ]]; then
