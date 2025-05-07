@@ -19,7 +19,7 @@ case "$network_choice" in
 esac
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-output=$(sudo docker run --entrypoint /app/get-config.sh -v $SCRIPT_DIR/reports:/app/reports -v $SCRIPT_DIR/config.json:/app/config.json -v $SCRIPT_DIR/logs:/app/logs tvt $network_choice)
+output=$(docker run --entrypoint /app/get-config.sh -v $SCRIPT_DIR/reports:/app/reports -v $SCRIPT_DIR/config.json:/app/config.json -v $SCRIPT_DIR/logs:/app/logs tvt $network_choice)
 
 # Parse the output using grep and cut
 operator_id=$(echo "$output" | grep '^operator_id:' | cut -d' ' -f2)
@@ -76,7 +76,7 @@ if [[ "$dettach" =~ ^[Yy]$ ]]; then
     detach_flag=""
 fi
 
-docker_command=("sudo" "docker" "run")
+docker_command=("docker" "run")
 if [ -n "$detach_flag" ]; then
   docker_command+=("$detach_flag")
 fi
