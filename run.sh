@@ -18,7 +18,8 @@ case "$network_choice" in
         ;;
 esac
 
-output=$(sudo docker run --entrypoint /app/get-config.sh tvt $network_choice)
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+output=$(sudo docker run --entrypoint /app/get-config.sh -v $SCRIPT_DIR/reports:/app/reports -v $SCRIPT_DIR/config.json:/app/config.json -v $SCRIPT_DIR/logs:/app/logs tvt $network_choice)
 
 # Parse the output using grep and cut
 operator_id=$(echo "$output" | grep '^operator_id:' | cut -d' ' -f2)
@@ -35,7 +36,8 @@ operator_id="${user_operator_id:-$operator_id}"
 operator_key="${user_operator_key:-$operator_key}"
 operator_key_type="${user_operator_key_type:-$operator_key_type}"
 
-read -p "Quantity: " quantity
+read -p "Quantity [5]: " quantity
+quantity=${quantity:-5}
 
 case "$network_choice" in
   LOCAL) network_cfg="localnet" ;;
@@ -47,9 +49,9 @@ esac
 read -p "Do you want to add a scheduler? (y/n): " add_scheduler
 
 if [[ "$add_scheduler" =~ ^[Yy]$ ]]; then
-  echo "Enter the cron pattern (e.g., '0 * * * *'): "
+  echo "Enter the cron pattern (e.g., '0 * * * *'): (default)[*/15 * * * * *]"
   IFS= read -r cron_pattern
-
+  cron_pattern=${cron_pattern:-"*/15 * * * * *"}
   # Prevent wildcard expansion by escaping `*`
   scheduler_arg="--scheduler=$cron_pattern"
   # Ask for stop-after argument
@@ -67,7 +69,9 @@ else
   echo "Scheduler not added."
 fi
 
-docker_command=("sudo" "docker" "run" "tvt" "--network=$network_cfg" "--quantity=$quantity" "--operator-id=$operator_id" "--operator-key=$operator_key" "--key-type=$user_operator_key_type")
+
+
+docker_command=("sudo" "docker" "run" "-v" "$SCRIPT_DIR/reports:/app/reports" "-v" "$SCRIPT_DIR/config.json:/app/config.json" "-v" "$SCRIPT_DIR/logs:/app/logs" "tvt" "--network=$network_cfg" "--quantity=$quantity" "--operator-id=$operator_id" "--operator-key=$operator_key" "--key-type=$user_operator_key_type")
 
 # Append optional arguments if set
 if [[ -n "$scheduler_arg" ]]; then
@@ -79,5 +83,4 @@ if [[ -n "$stop_after_arg" ]]; then
 fi
 
 "${docker_command[@]}"
-# sudo docker run tvt --network=$network_cfg --quantity=$quantity --operator-id=$operator_id --operator-key=$operator_key --key-type=$user_operator_key_type $scheduler_arg $stop_after_arg
 

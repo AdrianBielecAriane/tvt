@@ -8,7 +8,6 @@ import { config as configDotenv } from 'dotenv';
 import path from 'path';
 import { sleep } from './utils/sleep';
 import { format } from 'date-fns';
-import os from 'os';
 import { CronJob } from 'cron';
 import { validateCronExpression } from 'cron';
 import { invariant } from './utils/invariant';
@@ -172,12 +171,12 @@ const mainMethod = async () => {
     failedRequests = await fireActions({ requests, isRetry: true, numberOfActions: requests.length });
   }
 
-  if (!fsSync.existsSync(path.join(os.homedir(), 'tvt', 'reports'))) {
-    await fs.mkdir(path.join(os.homedir(), 'tvt', 'reports'), { recursive: true });
+  if (!fsSync.existsSync('reports')) {
+    await fs.mkdir('reports', { recursive: true });
   }
 
   const time = new Date();
-  const reportsPath = path.join(os.homedir(), 'tvt', 'reports', format(time, 'ddMMyyyy-HHmmss'));
+  const reportsPath = path.join('reports', format(time, 'ddMMyyyy-HHmmss'));
   await fs.mkdir(reportsPath);
 
   console.log('\n\n');
@@ -189,7 +188,6 @@ const mainMethod = async () => {
 
 try {
   if (cronPattern) {
-    console.log(cronPattern);
     const job = CronJob.from({
       cronTime: cronPattern,
       onTick: mainMethod,
