@@ -153,7 +153,7 @@ Each row corresponds to a single transaction. For example, if you ran 1 of each 
 
 Some transaction types on Hedera involve gas fees (for example, Smart Contract Calls and Ethereum Transactions on Hedera). These are considered “gas-heavy” operations because their fee is not a fixed value – it depends on the amount of gas used and the network gas price at the time of execution.
 
-In the context of TVT’s reports, you may notice that for such gas-dependent transaction types, the fee comparison column (related to scheduled fees) may show “N/A (Gas Dependent)” or “Variable” instead of a concrete number. This is intentional. It indicates that a direct comparison to a single scheduled fee is not applicable, since the cost largely comes from gas consumption which varies per transaction.
+In the context of TVT’s reports, you may notice that for such gas-dependent transaction types, the fee comparison column (related to scheduled fees) may show number prefixed with "(B)". This is intentional. It indicates that a direct comparison to a single scheduled fee is not applicable, since the cost largely comes from gas consumption which varies per transaction.
 
 For example, a contract call’s total fee consists of a base service fee plus a fee proportional to the gas used by that contract execution. The scheduled fee in Hedera’s fee schedule for a contract call might only cover the base part, while the actual fee can vary widely depending on how much gas was required (which in turn depends on the complexity of the contract code executed).
 

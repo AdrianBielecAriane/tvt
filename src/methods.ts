@@ -48,6 +48,8 @@ export interface AssumptionObject {
   gasFee?: Long | undefined;
 }
 
+const isEVMTransaction = (type: string) => ['CONTRACT_CALL', 'ETHEREUM_TRANSACTION'].includes(type);
+
 export class Methods {
   private data = new Map<
     TransactionType,
@@ -134,7 +136,7 @@ export class Methods {
         let gasPrice;
         let gasConsumed;
         // Get gas price here, if we'd request it immediatly after creating transaction we may receive an error
-        if (type === 'CONTRACT_CALL' || type === 'ETHEREUM_TRANSACTION') {
+        if (isEVMTransaction(type)) {
           const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
           const query = await this.hedera.getContractResult({
             transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
@@ -155,7 +157,7 @@ export class Methods {
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
           transaction.gasUsed ? Hbar.fromTinybars(transaction.gasUsed).toString() : '-',
-          Hbar.fromTinybars(totalGasFee).toString(),
+          `${isEVMTransaction(type) ? '(B)' : ''}${Hbar.fromTinybars(totalGasFee).toString()}`,
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
       }
@@ -194,7 +196,7 @@ export class Methods {
       let totalEstimatedGasFee = 0;
       let totalGasPrice = 0;
       let totalGasConsumed = 0;
-      if (['ETHEREUM_TRANSACTION', 'CONTRACT_CALL'].includes(type)) {
+      if (isEVMTransaction(type)) {
         for (const transaction of transactions) {
           const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
           const query = await this.hedera.getContractResult({
@@ -258,7 +260,7 @@ export class Methods {
         transactions.length.toString(),
         (totalFee * hbarPrice).toString(),
         avgGasPriceUSD.toString(),
-        avgGasConsumedUSD.toString(),
+        `${isEVMTransaction(type) ? '(B)' : ''}${avgGasConsumedUSD.toString()}`,
         baseScheduleFee.toString(),
         scheduleFeeDifference.toFixed(4),
         ((scheduleFeeDifference * 100) / baseScheduleFee).toFixed(2),
