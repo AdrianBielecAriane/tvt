@@ -8,21 +8,25 @@ import { invariant } from '../utils/invariant';
 const networkOptions = ['mainnet', 'testnet', 'localnet'] as const;
 export type Network = (typeof networkOptions)[number];
 
+interface ConfigShared {
+  reInit: boolean;
+  operatorKey: string;
+  operatorKeyType: 'ED25519' | 'ECDSA';
+}
+
 type LocalConfig = {
   network: Exclude<Network, 'mainnet' | 'testnet'>;
   operatorId: string;
   networkIp: string;
-  operatorKey: string;
-  operatorKeyType: 'ED25519' | 'ECDSA';
 };
 
 type ExternalConfig = {
   network: Exclude<Network, 'localnet'>;
   operatorId: string;
   networkIp?: never;
-  operatorKey: string;
-  operatorKeyType: 'ED25519' | 'ECDSA';
 };
+
+type ConfigObj = ConfigShared & (LocalConfig | ExternalConfig);
 
 const configSchema = z.object({
   TVT_LOCAL_OPERATOR_ID: z.string().optional(),
@@ -91,9 +95,9 @@ export const getEnv = <P extends ConfigPrefix, K extends SuffixesForPrefix<P>>({
 };
 
 export class Config {
-  config: LocalConfig | ExternalConfig;
+  config: ConfigObj;
 
-  private constructor(config: LocalConfig | ExternalConfig) {
+  private constructor(config: ConfigObj) {
     this.config = config;
   }
 
@@ -122,6 +126,7 @@ export class Config {
         validate: (v) => v,
       })) ?? envs[`${prefix}_OPERATOR_ID`];
     invariant(operatorId, 'You have to pass operator-id in args');
+    const isNewOperatorId = operatorId !== envs[`${prefix}_OPERATOR_ID`];
 
     const keyType = await getArg({
       argName: 'key-type',
@@ -137,6 +142,7 @@ export class Config {
         validate: (v) => v,
       })) ?? envs[`${prefix}_OPERATOR_KEY`];
     invariant(operatorKey, 'You have to pass operator-key in args');
+    const isNewOperatorKey = operatorKey !== envs[`${prefix}_OPERATOR_KEY`];
 
     const JSON_TO_SAVE = {
       [`${prefix}_OPERATOR_ID`]: operatorId,
@@ -144,7 +150,7 @@ export class Config {
       [`${prefix}_OPERATOR_KEY_TYPE`]: keyType,
     };
 
-    return { operatorId, operatorKey, JSON_TO_SAVE, keyType };
+    return { operatorId, operatorKey, JSON_TO_SAVE, keyType, isNewOperatorId, isNewOperatorKey };
   }
 
   private static async initLocalNetwork() {
@@ -152,28 +158,33 @@ export class Config {
     if (!address) {
       address = await this.setLocalNetwork();
     }
-    const { operatorId, operatorKey, JSON_TO_SAVE, keyType } = await Config.initCredentials('localnet');
+    const { operatorId, operatorKey, JSON_TO_SAVE, keyType, isNewOperatorId, isNewOperatorKey } =
+      await Config.initCredentials('localnet');
     return {
       address,
       operatorId,
       operatorKey,
+      isNewOperatorId,
+      isNewOperatorKey,
       keyType,
       JSON_TO_SAVE: { ...JSON_TO_SAVE, TVT_LOCAL_NETWORK_IP: address },
     };
   }
 
   static async create(network: Network) {
-    let configInitializer: LocalConfig | ExternalConfig;
+    let configInitializer: ConfigObj;
     let newConfigFile: Record<string, string> = {};
     switch (network) {
       case 'localnet':
         {
-          const { address, operatorId, operatorKey, JSON_TO_SAVE, keyType } = await this.initLocalNetwork();
+          const { address, operatorId, operatorKey, JSON_TO_SAVE, keyType, isNewOperatorId, isNewOperatorKey } =
+            await this.initLocalNetwork();
           configInitializer = {
             network: 'localnet',
             networkIp: address,
             operatorId,
             operatorKey,
+            reInit: isNewOperatorId || isNewOperatorKey,
             operatorKeyType: keyType,
           };
           newConfigFile = JSON_TO_SAVE;
@@ -182,8 +193,15 @@ export class Config {
       case 'mainnet':
       case 'testnet':
         {
-          const { operatorId, operatorKey, JSON_TO_SAVE, keyType } = await this.initCredentials(network);
-          configInitializer = { network, operatorId, operatorKey, operatorKeyType: keyType };
+          const { operatorId, operatorKey, JSON_TO_SAVE, keyType, isNewOperatorId, isNewOperatorKey } =
+            await this.initCredentials(network);
+          configInitializer = {
+            network,
+            operatorId,
+            operatorKey,
+            operatorKeyType: keyType,
+            reInit: isNewOperatorId || isNewOperatorKey,
+          };
           newConfigFile = JSON_TO_SAVE;
         }
         break;

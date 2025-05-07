@@ -47,6 +47,7 @@ docker run tvt --network=testnet --quantity=1
 ```
 
 All logs are saved by default at your home dir in `tvt` folder.
+To copy you have to run command
 
 ### Args
 

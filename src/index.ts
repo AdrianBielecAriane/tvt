@@ -143,7 +143,14 @@ const fireActions = async ({ numberOfActions, requests, isRetry }: FireActions) 
   return failedRequests;
 };
 
+let isAnyRuns = false;
 const mainMethod = async () => {
+  if (isAnyRuns) {
+    logger.warn('Another cron is already running, cannot start the cron');
+    return;
+  }
+  isAnyRuns = true;
+
   await Promise.all(
     chunkedActions.map((actions) => {
       return new Promise(async (resolve) => {
@@ -170,24 +177,25 @@ const mainMethod = async () => {
   }
 
   const time = new Date();
-  const reportsPath = path.join(os.homedir(), 'tvt', 'reports', format(time, 'ddMMyyyy-HHmm'));
+  const reportsPath = path.join(os.homedir(), 'tvt', 'reports', format(time, 'ddMMyyyy-HHmmss'));
   await fs.mkdir(reportsPath);
 
   console.log('\n\n');
   logger.info('Saving report');
   await Promise.all([methods.saveReport(reportsPath), methods.saveDetailsReport(hedera, reportsPath)]);
   console.log(`file://${reportsPath}`);
+  isAnyRuns = false;
 };
 
 try {
   if (cronPattern) {
+    console.log(cronPattern);
     const job = CronJob.from({
       cronTime: cronPattern,
       onTick: mainMethod,
       start: true,
     });
     if (typeof stopAfter === 'number' && stopAfter > 0) {
-      console.log(stopAfter / 1000);
       setTimeout(async () => {
         logger.info('Stopping cron');
         await job.stop();
