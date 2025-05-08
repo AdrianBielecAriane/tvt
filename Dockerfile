@@ -4,6 +4,11 @@ RUN apt-get update && \
     apt-get install -y jq && \
     rm -rf /var/lib/apt/lists/*
 
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml* ./
@@ -13,8 +18,12 @@ RUN if [ -f pnpm-lock.yaml ]; then \
     else \
       npm install; \
     fi
-COPY . .
-ENV NODE_ENV=production
 
-ENTRYPOINT ["pnpm", "start"]
-CMD ["--network=testnet", "--quantity=1"]
+COPY . .
+
+
+# Copy your script into a directory in PATH
+RUN chmod +x /app/run.sh
+
+# Default to bash if no command is provided
+ENTRYPOINT ["/bin/bash", "-c"]

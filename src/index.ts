@@ -5,10 +5,9 @@ import fs from 'fs/promises';
 import { chunk } from 'remeda';
 import { AssumptionObject, Methods } from './methods';
 import { config as configDotenv } from 'dotenv';
-import path from 'path';
 import { sleep } from './utils/sleep';
 import { format } from 'date-fns';
-import { CronJob } from 'cron';
+import { CronJob, sendAt } from 'cron';
 import { validateCronExpression } from 'cron';
 import { invariant } from './utils/invariant';
 import { logger } from './utils/logger';
@@ -20,10 +19,19 @@ configDotenv();
 const cronPattern = await getArg({
   argName: 'scheduler',
   validate: (value) => {
-    if (!value) return;
+    if (!value || value === '') return;
+    console.log(value, 'Cron scheduler');
     const isValidExpression = validateCronExpression(value);
     invariant(isValidExpression.valid, 'Cron scheduler is invalid');
     return value;
+  },
+});
+
+const cronTimeout = await getArg({
+  argName: 'scheduler-timeout',
+  validate: (value) => {
+    if (!value) return;
+    return z.preprocess((v) => Number(v), z.number()).parse(value);
   },
 });
 
@@ -96,12 +104,12 @@ const allActions: (typeof actions)[number][] = actions.flatMap((action) => new A
 
 const chunkedActions = chunk(allActions, Math.ceil(allActions.length / 3));
 
-const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionObject>> = {
+const mappedMethods: Record<(typeof actions)[number], () => Promise<AssumptionObject | AssumptionObject[]>> = {
   'Approve allowance': methods.allowanceApproveTransaction,
   'Transfer token(NFT)': methods.transferTokenNft,
   'Transfer token(FT)': methods.transferTokenFt,
   'Burn token': methods.tokenBurn,
-  'Call contract': methods.contractCall,
+  'Call contract': methods.contractCallTwice,
   'Create account': methods.createWallet,
   'Mint token(NFT)': () => methods.tokenMint('NFT'),
   'Mint token(FT)': () => methods.tokenMint('FT'),
@@ -126,7 +134,9 @@ const fireActions = async ({ numberOfActions, requests, isRetry }: FireActions) 
   let failedRequests: (typeof actions)[number][] = [];
   for (const failedAction of requests) {
     logger.info(
-      `${failedAction} is called. ${++failedActionCount} / ${numberOfActions}.${isRetry ? `Attempt ${retries++}` : ''}`
+      `${failedAction} is called. ${++failedActionCount} / ${numberOfActions}.${
+        isRetry ? `Attempt ${retries++ + 1}` : ''
+      }`
     );
     try {
       await methods.storeDataWrapper(mappedMethods[failedAction]);
@@ -149,11 +159,12 @@ const mainMethod = async () => {
     return;
   }
   isAnyRuns = true;
-
+  failedRequests = [];
   await Promise.all(
     chunkedActions.map((actions) => {
       return new Promise(async (resolve) => {
-        failedRequests = await fireActions({ requests: actions, numberOfActions: allActions.length });
+        const actionsResults = await fireActions({ requests: actions, numberOfActions: allActions.length });
+        failedRequests.push(...actionsResults);
         resolve(true);
       });
     })
@@ -171,12 +182,8 @@ const mainMethod = async () => {
     failedRequests = await fireActions({ requests, isRetry: true, numberOfActions: requests.length });
   }
 
-  if (!fsSync.existsSync('reports')) {
-    await fs.mkdir('reports', { recursive: true });
-  }
-
   const time = new Date();
-  const reportsPath = path.join('reports', format(time, 'ddMMyyyy-HHmmss'));
+  const reportsPath = `reports_${format(time, 'yyyy-MM-dd_hh-mm-ss')}`;
   await fs.mkdir(reportsPath);
 
   console.log('\n\n');
@@ -187,12 +194,16 @@ const mainMethod = async () => {
 };
 
 try {
-  if (cronPattern) {
+  if (cronPattern || cronTimeout) {
+    const currentMinute = new Date().getMinutes();
+    const validPattern =
+      typeof cronPattern === 'string' ? cronPattern : `0 ${currentMinute + 1} */${cronTimeout} * * *`;
     const job = CronJob.from({
-      cronTime: cronPattern,
+      cronTime: validPattern,
       onTick: mainMethod,
       start: true,
     });
+    logger.info(`Cron will run first time at: ${sendAt(validPattern).toString()}`);
     if (typeof stopAfter === 'number' && stopAfter > 0) {
       setTimeout(async () => {
         logger.info('Stopping cron');

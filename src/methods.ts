@@ -22,6 +22,7 @@ import { coingekoApi } from './modules/coingeko';
 import { scheduledFees } from './utils/scheduled-fees.data';
 import { invariant } from './utils/invariant';
 import { quantile, standardDeviation, median } from 'simple-statistics';
+import { sleep } from './utils/sleep';
 
 const transactionTypes = [
   'CRYPTO_TRANSFER(HBar)',
@@ -97,6 +98,15 @@ export class Methods {
     console.log('Initializing CLI');
     const prefix = hedera.getPrefix();
     const topic = await HederaTopic.init(hedera);
+    // Prefetch, verify whether credentials are valid
+    try {
+      await topic.submitMessage();
+    } catch (e) {
+      if (e instanceof Error) {
+        console.log(e.message);
+      }
+    }
+
     const contract = await HederaContract.init(hedera);
     const { fungibleToken, nonFungibleToken, nft } = await HederaToken.init(hedera);
     invariant(nft, 'NFT not exist');
@@ -121,7 +131,7 @@ export class Methods {
   }
 
   async saveDetailsReport(hedera: Hedera, folderPath: string) {
-    const headers = ['Id', 'Type', 'Fee(HBar)', 'Gas used', 'Total Gas Fee', 'Hashscan link'];
+    const headers = ['Id', 'Type', 'Fee(HBar)', 'Gas used', 'Comment', 'Total Gas Fee', 'Hashscan link'];
     const rows: string[][] = [];
 
     let hashscanUrl;
@@ -132,9 +142,11 @@ export class Methods {
     }
 
     for (const [type, transactions] of this.data.entries()) {
+      let comment = '-';
       for (const transaction of transactions) {
         let gasPrice;
         let gasConsumed;
+        let gasUsed;
         // Get gas price here, if we'd request it immediatly after creating transaction we may receive an error
         if (isEVMTransaction(type)) {
           const rightPartOfTransaction = transaction.transactionId.split('@')[1]?.replaceAll('.', '-');
@@ -142,6 +154,7 @@ export class Methods {
             transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
           });
           gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
+          gasUsed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
 
           const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
           gasPrice = gasFees.fees.find((fee) =>
@@ -149,6 +162,12 @@ export class Methods {
               ? fee.transaction_type === 'ContractCall'
               : fee.transaction_type === 'EthereumTransaction'
           )?.gas;
+
+          if (gasConsumed._valueInTinybar.toNumber() === gasUsed._valueInTinybar.toNumber()) {
+            comment = 'The transaction was executed with the exact amount of gas needed.';
+          } else if (gasConsumed._valueInTinybar.toNumber() > gasUsed._valueInTinybar.toNumber()) {
+            comment = 'The transaction was executed with more gas than needed. Hedera returns only 20% of the gas set.';
+          }
         }
 
         const totalGasFee = gasPrice && gasConsumed ? Number(gasConsumed._valueInTinybar.toString()) * gasPrice : 0;
@@ -157,6 +176,7 @@ export class Methods {
           type,
           transaction.fee.toBigNumber().toNumber().toString(),
           transaction.gasUsed ? Hbar.fromTinybars(transaction.gasUsed).toString() : '-',
+          comment,
           `${isEVMTransaction(type) ? '(B)' : ''}${Hbar.fromTinybars(totalGasFee).toString()}`,
           `${hashscanUrl}/${transaction.transactionId}`,
         ]);
@@ -228,7 +248,11 @@ export class Methods {
           .toNumber() * hbarPrice;
 
       const avgFee = totalFee / transactions.length;
-      const baseScheduleFee = scheduledFees[type];
+      let baseScheduleFee = scheduledFees[type];
+      if (isEVMTransaction(type)) {
+        baseScheduleFee += avgGasConsumedUSD + avgGasPriceUSD;
+      }
+
       const avgFeeInUsd = avgFee * hbarPrice;
       const feesArray = transactions
         .map((transaction) => transaction.fee.toBigNumber().toNumber())
@@ -277,10 +301,14 @@ export class Methods {
     await fs.writeFile(path.join(folderPath, `report.csv`), csv, { encoding: 'utf-8' });
   }
 
-  async storeDataWrapper(method: () => Promise<AssumptionObject>) {
-    const { type, ...data } = await method.call(this);
-    const cachedItem = this.data.get(type) ?? [];
-    this.data.set(type, [...cachedItem, data]);
+  async storeDataWrapper(method: () => Promise<AssumptionObject | AssumptionObject[]>) {
+    const results = await method.call(this);
+    const arrayResults = Array.isArray(results) ? results : [results];
+    for (const result of arrayResults) {
+      const { type, ...data } = result;
+      const cachedItem = this.data.get(type) ?? [];
+      this.data.set(type, [...cachedItem, data]);
+    }
   }
 
   async associateToken(): Promise<AssumptionObject> {
@@ -344,23 +372,42 @@ export class Methods {
     };
   }
 
-  async ethereumTransaction(): Promise<AssumptionObject> {
-    return this.ethers.createRawTransaction(this.receiver);
+  async ethereumTransaction(): Promise<AssumptionObject[]> {
+    const firstTx = await this.ethers.createRawTransaction(this.receiver);
+    const secondTx = await this.ethers.createRawTransaction(this.receiver, firstTx.gasFee?.toNumber());
+    return [firstTx, secondTx];
   }
 
-  async contractCall(): Promise<AssumptionObject> {
-    const transaction = new ContractExecuteTransaction()
-      .setGas(100000)
+  async contractCallTwice(): Promise<AssumptionObject[]> {
+    const firstTx = await this.contractCall();
+    const secondTx = await this.contractCall(firstTx.transactionId);
+    return [firstTx, secondTx];
+  }
+
+  async contractCall(prevContractId?: string): Promise<AssumptionObject> {
+    let gas = 200_000;
+    if (prevContractId) {
+      const rightPartOfTransaction = prevContractId.split('@')[1]?.replaceAll('.', '-');
+      const query = await this.hedera.getContractResult({
+        transactionId: `${prevContractId.split('@')[0]}-${rightPartOfTransaction}`,
+      });
+      gas = query.gas_consumed;
+    }
+
+    const transaction1 = new ContractExecuteTransaction()
+      .setGas(gas)
       .setContractId(this.contract.contractId)
       .setFunction('set_message', new ContractFunctionParameters().addString('Hello from Hedera again!'));
-    const submitExecTx = await transaction.execute(this.hedera.client);
-    const record = await submitExecTx.getRecord(this.hedera.client);
+    const submitExecTx = await transaction1.execute(this.hedera.client);
+    if (typeof prevContractId === 'undefined') {
+      await sleep(5000);
+    }
+
     await submitExecTx.getReceipt(this.hedera.client);
+    const record = await submitExecTx.getRecord(this.hedera.client);
 
     return {
       fee: record.transactionFee,
-      gasUsed: record.contractFunctionResult?.gasUsed,
-      gasFee: record.contractFunctionResult?.gas,
       transactionId: submitExecTx.transactionId.toString(),
       type: 'CONTRACT_CALL',
     };

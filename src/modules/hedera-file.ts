@@ -51,7 +51,7 @@ export class HederaFile {
   async append(): Promise<AssumptionObject> {
     const transaction = new FileAppendTransaction()
       .setFileId(this.fileId)
-      .setContents(randomString(6))
+      .setContents(randomString(990))
       .freezeWith(this.hedera.client);
     const signTx = await transaction.sign(this.hedera.operatorKey);
     const txResponse = await signTx.execute(this.hedera.client);

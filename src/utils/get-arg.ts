@@ -5,6 +5,8 @@ interface Config<T> {
 
 export const getArg = <T>({ argName, validate }: Config<T>) => {
   const arg = process.argv.find((val) => val.startsWith(`--${argName}`));
-  const argValue = arg?.split('=')[1];
+  const [argKey, argValue] = arg?.split('=') ?? [];
+  if (argKey !== `--${argName}`) return validate(undefined);
+
   return validate(argValue);
 };

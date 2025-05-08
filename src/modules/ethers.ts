@@ -41,7 +41,7 @@ export class Ethers {
     this.isNonceError = false;
   }
 
-  async createRawTransaction(target: HederaWallet): Promise<AssumptionObject> {
+  async createRawTransaction(target: HederaWallet, gasLimit = 200_000): Promise<AssumptionObject> {
     if (this.isNonceError) {
       await sleep(5000);
     }
@@ -61,7 +61,7 @@ export class Ethers {
     invariant(gasPrice, 'Gas price not exist');
     const tx = {
       nonce: this.nonce++,
-      gasLimit: 250000,
+      gasLimit,
       maxPriorityFeePerGas,
       maxFeePerGas,
       to: `0xe9e7cea3dedca5984780bafc599bd69add087d56`,
@@ -93,6 +93,8 @@ export class Ethers {
 
     return {
       fee: record.transactionFee,
+      gasFee: record.contractFunctionResult?.gas,
+      gasUsed: record.contractFunctionResult?.gasUsed,
       transactionId: txResponse.transactionId.toString(),
       type: 'ETHEREUM_TRANSACTION',
     };

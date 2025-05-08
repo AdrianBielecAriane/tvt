@@ -15,6 +15,7 @@ interface GetGasPrice {
 
 const contractResultSchema = z.object({
   gas_consumed: z.number(),
+  gas_used: z.number(),
 });
 
 const gasPriceSchema = z.object({

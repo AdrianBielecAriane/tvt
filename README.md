@@ -68,8 +68,9 @@ Once Docker is installed and your Hedera credentials are ready, you can set up a
 
 ```bash
 git clone https://github.com/AdrianBielecAriane/tvt.git
+cd tvt
 docker build -t tvt .
-docker run tvt --network=testnet --quantity=1
+docker run -it -v "$(pwd)":/app/. tvt ./run.sh
 ```
 
 All logs are saved by default at your home dir in `tvt` folder.
