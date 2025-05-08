@@ -19,6 +19,8 @@ RUN if [ -f pnpm-lock.yaml ]; then \
       npm install; \
     fi
 
+RUN npm install -g tsx
+
 COPY . .
 
 
