@@ -83,6 +83,9 @@ export class Ethers {
       ethereumData: Buffer.from(signedTx.slice(2), 'hex'),
     });
     const txResponse = await transaction.execute(this.hedera.client);
+    if (!prevEthTransactionId) {
+      await sleep(5000);
+    }
 
     try {
       await txResponse.getReceipt(this.hedera.client);
