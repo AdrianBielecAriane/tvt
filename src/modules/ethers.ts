@@ -41,14 +41,22 @@ export class Ethers {
     this.isNonceError = false;
   }
 
-  async createRawTransaction(target: HederaWallet, gasLimit = 200_000): Promise<AssumptionObject> {
+  async createRawTransaction(target: HederaWallet, prevEthTransactionId?: string): Promise<AssumptionObject> {
     if (this.isNonceError) {
       await sleep(5000);
     }
+    let gasLimit = 200_000;
 
     // Minimalize issue related to wrong nonce
     const timeoutTime = randomInteger(1, 5000);
     await sleep(timeoutTime);
+    if (prevEthTransactionId) {
+      const rightPartOfTransaction = prevEthTransactionId.split('@')[1]?.replaceAll('.', '-');
+      const query = await this.hedera.getContractResult({
+        transactionId: `${prevEthTransactionId.split('@')[0]}-${rightPartOfTransaction}`,
+      });
+      gasLimit = query.gas_consumed;
+    }
 
     const abi = ['function transfer(address to, uint amount)'];
     const { gasPrice, maxFeePerGas, maxPriorityFeePerGas } = await this.provider.getFeeData();

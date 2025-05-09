@@ -154,7 +154,7 @@ export class Methods {
             transactionId: `${transaction.transactionId.split('@')[0]}-${rightPartOfTransaction}`,
           });
           gasConsumed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
-          gasUsed = new Hbar(query.gas_consumed, HbarUnit.Tinybar);
+          gasUsed = new Hbar(query.gas_used, HbarUnit.Tinybar);
 
           const gasFees = await this.hedera.getGasPrice({ transactionId: transaction.transactionId });
           gasPrice = gasFees.fees.find((fee) =>
@@ -374,7 +374,7 @@ export class Methods {
 
   async ethereumTransaction(): Promise<AssumptionObject[]> {
     const firstTx = await this.ethers.createRawTransaction(this.receiver);
-    const secondTx = await this.ethers.createRawTransaction(this.receiver, firstTx.gasFee?.toNumber());
+    const secondTx = await this.ethers.createRawTransaction(this.receiver, firstTx.transactionId);
     return [firstTx, secondTx];
   }
 

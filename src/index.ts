@@ -100,7 +100,19 @@ const balance = await hedera.getCustodianBalance();
 logger.info(`Your balance: ${balance}HBar`);
 
 // Store actions to call
-const allActions: (typeof actions)[number][] = actions.flatMap((action) => new Array(quantity).fill(action));
+const allActions: (typeof actions)[number][] = actions
+  .filter((action) => {
+    if (config.config.operatorKeyType !== 'ED25519') {
+      return true;
+    }
+    const isEthTransaction = action === 'Eth transaction';
+    if (isEthTransaction) {
+      logger.warn('Eth transactions are not supported in ED25519, omitting actions');
+    }
+
+    return !isEthTransaction;
+  })
+  .flatMap((action) => new Array(quantity).fill(action));
 
 const chunkedActions = chunk(allActions, Math.ceil(allActions.length / 3));
 
