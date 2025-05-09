@@ -165,7 +165,7 @@ export class Methods {
 
           if (gasConsumed._valueInTinybar.toNumber() === gasUsed._valueInTinybar.toNumber()) {
             comment = 'The transaction was executed with the exact amount of gas needed.';
-          } else if (gasConsumed._valueInTinybar.toNumber() > gasUsed._valueInTinybar.toNumber()) {
+          } else if (gasConsumed._valueInTinybar.toNumber() < gasUsed._valueInTinybar.toNumber()) {
             comment = 'The transaction was executed with more gas than needed. Hedera returns only 20% of the gas set.';
           }
         }
