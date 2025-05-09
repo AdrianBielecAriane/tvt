@@ -131,6 +131,7 @@ interface FireActions {
 let retries = 0;
 let failedActionCount = 0;
 const fireActions = async ({ numberOfActions, requests, isRetry }: FireActions) => {
+  retries = 0;
   let failedRequests: (typeof actions)[number][] = [];
   for (const failedAction of requests) {
     logger.info(

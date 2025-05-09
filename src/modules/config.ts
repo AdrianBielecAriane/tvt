@@ -4,6 +4,7 @@ import { httpPing } from '../utils/http-ping';
 import { ConfigPrefix } from './hedera';
 import { getArg } from '../utils/get-arg';
 import { invariant } from '../utils/invariant';
+import { omit } from 'remeda';
 
 const networkOptions = ['mainnet', 'testnet', 'localnet'] as const;
 export type Network = (typeof networkOptions)[number];
@@ -76,7 +77,7 @@ export const getEnvsFile = async () => {
   return configSchema.parse(JSON.parse(configFile));
 };
 
-const envs = await getEnvsFile();
+let envs = await getEnvsFile();
 
 type ConfigSchema = NonNullable<z.infer<typeof configSchema>>;
 
@@ -206,8 +207,21 @@ export class Config {
         }
         break;
     }
-
-    await fs.writeFile('config.json', JSON.stringify({ ...envs, ...newConfigFile }), {
+    const shortcut = network === 'localnet' ? 'LOCAL' : network === 'mainnet' ? 'MAINNET' : 'TESTNET';
+    const prefix = `TVT_${shortcut}` as const;
+    const validEnvs = configInitializer.reInit
+      ? omit(envs, [
+          `${prefix}_TOPIC_ID`,
+          `${prefix}_CONTRACT_FILE_ID`,
+          `${prefix}_CONTRACT_ID`,
+          `${prefix}_TOKEN_ID`,
+          `${prefix}_WALLET_ID`,
+          `${prefix}_FILE_ID`,
+          `${prefix}_FUNGIBLE_TOKEN_ID`,
+        ])
+      : envs;
+    envs = { ...validEnvs };
+    await fs.writeFile('config.json', JSON.stringify({ ...validEnvs, ...newConfigFile }), {
       encoding: 'utf-8',
     });
     return new Config(configInitializer);
