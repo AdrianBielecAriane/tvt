@@ -4,3 +4,4 @@ reports
 config.json
 logs
 reports*
+pid*

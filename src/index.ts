@@ -13,6 +13,7 @@ import { invariant } from './utils/invariant';
 import { logger } from './utils/logger';
 import { getArg } from './utils/get-arg';
 import { z } from 'zod';
+import { Pid } from './modules/pid';
 
 configDotenv();
 
@@ -76,6 +77,7 @@ const stopAfter = getArg({
 });
 
 const config = await Config.create(network);
+const pid = await Pid.startProgram(config);
 const hedera = new Hedera(config);
 const methods = await Methods.create(hedera);
 
@@ -215,21 +217,27 @@ try {
       cronTime: validPattern,
       onTick: mainMethod,
       start: true,
+      onComplete: async () => {
+        await pid.unlinkPid();
+      },
     });
     logger.info(`Cron will run first time at: ${sendAt(validPattern).toString()}`);
     if (typeof stopAfter === 'number' && stopAfter > 0) {
       setTimeout(async () => {
         logger.info('Stopping cron');
         await job.stop();
+        await pid.unlinkPid();
         process.exit();
       }, stopAfter);
     }
   } else {
     await mainMethod();
+    await pid.unlinkPid();
     process.exit();
   }
 } catch (e) {
   console.log(e);
   await mainMethod();
+  await pid.unlinkPid();
   process.exit();
 }
