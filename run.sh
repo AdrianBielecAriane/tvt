@@ -1,6 +1,7 @@
 #!/bin/bash
 
 mkdir -p work
+mkdir -p /app/work/pid
 
 CONFIG_FILE="config.json"
 

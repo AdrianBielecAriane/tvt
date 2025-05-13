@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y jq bash dos2unix
 WORKDIR /app
 
 RUN mkdir -p /app/work
+RUN mkdir -p /app/work/pid
 
 COPY package.json pnpm-lock.yaml* ./
 
