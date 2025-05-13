@@ -31,8 +31,14 @@ const cronPattern = await getArg({
 const cronTimeout = await getArg({
   argName: 'scheduler-timeout',
   validate: (value) => {
-    if (!value) return;
-    return z.preprocess((v) => Number(v), z.number()).parse(value);
+    if (!value) return undefined;
+    return z
+      .preprocess((v) => {
+        const number = Number(v);
+        if (isNaN(number)) return v;
+        return number;
+      }, z.number().or(z.enum(['5m', '15m', '30m', '45m'])))
+      .parse(value);
   },
 });
 
@@ -211,8 +217,21 @@ const mainMethod = async () => {
 try {
   if (cronPattern || cronTimeout) {
     const currentMinute = new Date().getMinutes();
-    const validPattern =
-      typeof cronPattern === 'string' ? cronPattern : `0 ${currentMinute + 1} */${cronTimeout} * * *`;
+    // s m h w y
+    let validPattern = cronPattern;
+    if (!validPattern) {
+      const frequency = Number(cronTimeout?.toString().split('m')[0]);
+      const firstStartAtHour = (currentMinute + 1) % frequency;
+      const minutesAtRun = new Array(60 / frequency)
+        .fill(0)
+        .map((_, idx) => {
+          return (((idx + 1) * frequency + firstStartAtHour) % 60).toString();
+        })
+        .join(',');
+
+      validPattern = `0 ${minutesAtRun} * * * *`;
+    }
+    typeof cronPattern === 'string' ? cronPattern : `0 ${currentMinute + 1} */${cronTimeout} * * *`;
     const job = CronJob.from({
       cronTime: validPattern,
       onTick: mainMethod,
