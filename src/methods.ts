@@ -124,7 +124,7 @@ export class Methods {
       [`${prefix}_FUNGIBLE_TOKEN_ID`]: fungibleToken.tokenId.toString(),
     };
     const envs = await getEnvsFile();
-    await fs.writeFile('config.json', JSON.stringify({ ...envs, ...config }), {
+    await fs.writeFile(path.join('work', 'config.json'), JSON.stringify({ ...envs, ...config }), {
       encoding: 'utf-8',
     });
     return new Methods(hedera, topic, contract, receiver, nonFungibleToken, fungibleToken, nft, file, ethers);

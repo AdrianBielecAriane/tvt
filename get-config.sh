@@ -21,9 +21,9 @@ esac
 prefix="TVT_${network_choice}"
 
 # Extract variables from JSON
-operator_id=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_ID"]' /app/config.json)
-operator_key=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_KEY"]' /app/config.json)
-operator_key_type=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_KEY_TYPE"]' /app/config.json)
+operator_id=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_ID"]' /app/work/config.json)
+operator_key=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_KEY"]' /app/work/config.json)
+operator_key_type=$(jq -r --arg prefix "$prefix" '.[$prefix + "_OPERATOR_KEY_TYPE"]' /app/work/config.json)
 
 # Output the variables in VAR: VAL format
 echo "operator_id: $operator_id"

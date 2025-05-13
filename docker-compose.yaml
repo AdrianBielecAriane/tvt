@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: tvt
     volumes:
-      - .:/app
+      - .:/app/work
     working_dir: /app
     #entrypoint: bash -c "dos2unix /app/*.sh && /bin/bash -c \"./run.sh\""
     #command: ./run.sh

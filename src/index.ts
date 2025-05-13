@@ -1,6 +1,6 @@
 import { Config } from './modules/config';
 import { Hedera } from './modules/hedera';
-import fsSync from 'fs';
+import path from 'path';
 import fs from 'fs/promises';
 import { chunk } from 'remeda';
 import { AssumptionObject, Methods } from './methods';
@@ -198,7 +198,7 @@ const mainMethod = async () => {
   }
 
   const time = new Date();
-  const reportsPath = `reports_${format(time, 'yyyy-MM-dd_hh-mm-ss')}`;
+  const reportsPath = path.join('work', `reports_${format(time, 'yyyy-MM-dd_hh-mm-ss')}`);
   await fs.mkdir(reportsPath);
 
   console.log('\n\n');

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir -p work
+
 CONFIG_FILE="config.json"
 
 # Prompt user for network
@@ -20,8 +22,8 @@ esac
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 # Create config.json file with empty JSON object if it does not exist
-if [ ! -f "$SCRIPT_DIR/config.json" ]; then
-    echo "{}" > $SCRIPT_DIR/config.json
+if [ ! -f "$SCRIPT_DIR/work/config.json" ]; then
+    echo "{}" > $SCRIPT_DIR/work/config.json
     echo "config.json file created with empty JSON object."
 fi
 
@@ -110,14 +112,6 @@ else
   echo "Scheduler not added."
 fi
 
-if [ ! -d "node_modules" ]; then
-  echo "node_modules directory not found. Installing dependencies..."
-  pnpm install
-  if [ $? -ne 0 ]; then
-    echo "Error: Failed to install dependencies."
-    exit 1
-  fi
-fi
 run_command=("pnpm" "start" "--network=$network_cfg" "--quantity=$quantity" "--operator-id=$operator_id" "--operator-key=$operator_key" "--key-type=$operator_key_type")
 
 # Append optional arguments if set

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import fs from 'fs/promises';
 import { httpPing } from '../utils/http-ping';
+import path from 'path';
 import { ConfigPrefix } from './hedera';
 import { getArg } from '../utils/get-arg';
 import { invariant } from '../utils/invariant';
@@ -28,6 +29,8 @@ type ExternalConfig = {
 };
 
 type ConfigObj = ConfigShared & (LocalConfig | ExternalConfig);
+
+const configJsonPath = path.join('work', 'config.json');
 
 const configSchema = z.object({
   TVT_LOCAL_OPERATOR_ID: z.string().optional(),
@@ -66,14 +69,14 @@ const configSchema = z.object({
 });
 
 try {
-  await fs.access('config.json', fs.constants.F_OK);
+  await fs.access(configJsonPath, fs.constants.F_OK);
 } catch {
-  await fs.writeFile('config.json', `{}`, { encoding: 'utf-8' });
+  await fs.writeFile(configJsonPath, `{}`, { encoding: 'utf-8' });
 }
 
 // Always load fresh envs
 export const getEnvsFile = async () => {
-  const configFile = await fs.readFile('config.json', { encoding: 'utf-8' });
+  const configFile = await fs.readFile(configJsonPath, { encoding: 'utf-8' });
   return configSchema.parse(JSON.parse(configFile));
 };
 
@@ -221,7 +224,7 @@ export class Config {
         ])
       : envs;
     envs = { ...validEnvs };
-    await fs.writeFile('config.json', JSON.stringify({ ...validEnvs, ...newConfigFile }), {
+    await fs.writeFile(configJsonPath, JSON.stringify({ ...validEnvs, ...newConfigFile }), {
       encoding: 'utf-8',
     });
     return new Config(configInitializer);

@@ -14,7 +14,7 @@ export class Pid {
     if (!fsSync.existsSync('pid')) {
       await fs.mkdir('pid');
     }
-    const programPath = path.join(process.cwd(), 'pid', `${config.operatorId}-${config.network}.pid`);
+    const programPath = path.join(process.cwd(), 'work', 'pid', `${config.operatorId}-${config.network}.pid`);
     if (fsSync.existsSync(programPath)) {
       logger.error(
         `Running CLI using multiple instances for single account may create errors related to creating translations`
