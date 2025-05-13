@@ -63,12 +63,37 @@ esac
 read -p "Do you want to add a scheduler? (y/n): " add_scheduler
 
 if [[ "$add_scheduler" =~ ^[Yy]$ ]]; then
-  read -p "Every how many hours to run the task: " cron_pattern
-if ! [[ "$cron_pattern" =~ ^[0-9]+$ ]]; then
-  echo "Error:Passed value must be a number."
-  exit 1
-fi
-  scheduler_arg="--scheduler-timeout=$cron_pattern"
+options=("Every hour" "Every 2 hours" "Every 3 hours" "Every 4 hours")
+function show_menu() {
+  echo "Startup frequency"
+  PS3="Enter your choice (1-5): "
+  select choice in "${options[@]}"; do
+    case $REPLY in
+      1)
+        frequency=1
+        break
+        ;;
+      2)
+        frequency=2
+        break
+        ;;
+      3)
+        frequency=3
+        break
+        ;;
+      4)
+        frequency=4
+        break
+        ;;
+      *)
+        echo "Invalid option. Please try again."
+        ;;
+    esac
+  done
+}
+show_menu
+
+scheduler_arg="--scheduler-timeout=$frequency"
 
   # Ask for stop-after argument
   read -p "Enter the stop-after duration (e.g., '2w', '3d', '5h', '30m'): " stop_after_duration
