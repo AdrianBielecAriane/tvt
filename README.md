@@ -20,8 +20,19 @@ docs.docker.com
   **Installation**: On Debian/Ubuntu-based systems, you can install Docker using the package manager. For example:
 
 ```bash
-sudo apt update
-sudo apt install -y docker.io
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
 This installs Docker from the default repositories (which is sufficient for most uses). For the latest version, you may install docker-ce from Docker’s official repository (see Docker’s docs for your distro). After installation, ensure your user is in the “docker” group or use sudo for docker commands. Verify by running docker --version. On other distributions, refer to Docker’s official installation guide for the specific steps.
@@ -69,12 +80,23 @@ Once Docker is installed and your Hedera credentials are ready, you can set up a
 ```bash
 git clone https://github.com/AdrianBielecAriane/tvt.git
 cd tvt
-docker build -t tvt .
-docker run -it -v "$(pwd)":/app/. tvt ./run.sh
+docker compose up -d
+docker exec -it tvt /app/run.sh
 ```
 
 All logs are saved by default at your home dir in `tvt` folder.
 To copy you have to run command
+
+### Custom patterns
+
+- Cron scheduler custom pattern.
+- - To easly create and understand cron pattern you can check sites like https://crontab.cronhub.io/ and customize your own cron
+    An example of cron is `*/5 * * * *` that mean it will run every 5 minutes
+- Running time - Passing running time should be postfixed with one of:
+- - m - Minutes
+- - h - Hours
+- - d - Days
+    f.e 30m
 
 ### Args
 
