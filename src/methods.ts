@@ -239,11 +239,11 @@ export class Methods {
 
       const hbarPrice = price['hedera-hashgraph'].usd;
       const avgGasConsumedUSD =
-        Hbar.fromTinybars(totalGasConsumed / transactions.length)
+        Hbar.fromTinybars(Math.round(totalGasConsumed / transactions.length))
           .toBigNumber()
           .toNumber() * hbarPrice;
       const avgGasPriceUSD =
-        Hbar.fromTinybars(totalGasPrice / transactions.length)
+        Hbar.fromTinybars(Math.round(totalGasPrice / transactions.length))
           .toBigNumber()
           .toNumber() * hbarPrice;
 
